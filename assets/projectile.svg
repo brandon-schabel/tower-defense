@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-16 -16 32 32">
+    <defs>
+        <!-- Projectile Glow Filter -->
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+            </feMerge>
+        </filter>
+
+        <g id="projectile">
+            <!-- Energy Core -->
+            <circle cx="0" cy="0" r="4" 
+                    fill="#fff" 
+                    filter="url(#glow)" />
+            
+            <!-- Energy Trails -->
+            <path d="M-6,-6 L6,6 M6,-6 L-6,6" 
+                  stroke="#7cf" 
+                  stroke-width="2" 
+                  stroke-linecap="round" 
+                  opacity="0.6" />
+            
+            <!-- Center Detail -->
+            <circle cx="0" cy="0" r="2" 
+                    fill="#7cf" 
+                    stroke="#fff" 
+                    stroke-width="1" />
+            
+            <!-- Outer Ring -->
+            <circle cx="0" cy="0" r="6" 
+                    fill="none" 
+                    stroke="#7cf" 
+                    stroke-width="1" 
+                    opacity="0.5" />
+        </g>
+    </defs>
+    
+    <!-- Place the projectile for preview -->
+    <use href="#projectile" />
+</svg> 

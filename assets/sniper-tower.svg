@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <!-- Basic Tower (64x64) -->
+    <defs>
+        <!-- Sniper Tower (64x64) -->
+        <g id="sniper-tower">
+            <!-- Base -->
+            <path d="M24 44h16v12H24z" fill="#939" stroke="#000" stroke-width="2" />
+            <!-- Tower Body -->
+            <path d="M26 14h12v30H26z" fill="#b4b" stroke="#000" stroke-width="2" />
+            <!-- Turret -->
+            <circle cx="32" cy="12" r="6" fill="#c5c" stroke="#000" stroke-width="2" />
+            <!-- Long Barrel -->
+            <rect x="31" y="4" width="2" height="10" fill="#000" />
+            <!-- Scope -->
+            <rect x="29" y="8" width="6" height="3" fill="#626" stroke="#000" stroke-width="1" />
+            <!-- Details -->
+            <rect x="28" y="24" width="8" height="2" fill="#939" />
+            <rect x="28" y="32" width="8" height="2" fill="#939" />
+        </g>
+    </defs>
+
+    <!-- Place one of each tower type for preview -->
+    <use href="#sniper-tower" x="0" y="0" />
+</svg>
