@@ -228,3 +228,15 @@ button:focus-visible {
   color: white;
   pointer-events: none;
 }
+
+#tower-stats {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 1rem;
+  border-radius: 4px;
+  color: white;
+  max-width: 200px;
+  pointer-events: none;
+}

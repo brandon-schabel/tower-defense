@@ -2,21 +2,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
     <!-- Basic Tower (64x64) -->
     <defs>
+        <!-- Gradients -->
+        <linearGradient id="baseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#aa66aa;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#939;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#cc88cc;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#b4b;stop-opacity:1" />
+        </linearGradient>
+        <radialGradient id="turretGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" style="stop-color:#dd99dd;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#c5c;stop-opacity:1" />
+        </radialGradient>
+        <linearGradient id="scopeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#88aaff;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#626;stop-opacity:1" />
+        </linearGradient>
+
+      <filter id="shadow" x="-0.2" y="-0.2" width="1.4" height="1.4">
+        <feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.5"/>
+      </filter>
+
         <!-- Sniper Tower (64x64) -->
         <g id="sniper-tower">
             <!-- Base -->
-            <path d="M24 44h16v12H24z" fill="#939" stroke="#000" stroke-width="2" />
+            <path d="M24 44h16v12H24z" fill="url(#baseGradient)" stroke="#000" stroke-width="2" />
             <!-- Tower Body -->
-            <path d="M26 14h12v30H26z" fill="#b4b" stroke="#000" stroke-width="2" />
+            <path d="M26 14h12v30H26z" fill="url(#bodyGradient)" stroke="#000" stroke-width="2" />
             <!-- Turret -->
-            <circle cx="32" cy="12" r="6" fill="#c5c" stroke="#000" stroke-width="2" />
+            <circle cx="32" cy="12" r="6" fill="url(#turretGradient)" stroke="#000" stroke-width="2" />
             <!-- Long Barrel -->
             <rect x="31" y="4" width="2" height="10" fill="#000" />
+            <rect x="30" y="3" width="4" height="2" fill="#222" />
             <!-- Scope -->
-            <rect x="29" y="8" width="6" height="3" fill="#626" stroke="#000" stroke-width="1" />
+            <rect x="29" y="8" width="6" height="3" fill="url(#scopeGradient)" stroke="#000" stroke-width="1" />
             <!-- Details -->
             <rect x="28" y="24" width="8" height="2" fill="#939" />
             <rect x="28" y="32" width="8" height="2" fill="#939" />
+            <!-- Highlights -->
+            <rect x="29" y="25" width="6" height="1" fill="#b4b" />
+            <rect x="29" y="33" width="6" height="1" fill="#b4b" />
+          <g style="filter:url(#shadow);">
+            <use href="#sniper-tower"/>
+          </g>
         </g>
     </defs>
 

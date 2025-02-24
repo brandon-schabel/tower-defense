@@ -1,45 +1,62 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-32 -32 64 64">
     <defs>
-        <!-- Base Glow Filter -->
-        <filter id="baseGlow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1" result="blur" />
-            <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-            </feMerge>
+        <!-- Gradients -->
+        <radialGradient id="coreGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" style="stop-color:#99ddff;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#3c7;stop-opacity:1" />
+        </radialGradient>
+        <radialGradient id="towerGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" style="stop-color:#559977;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#195;stop-opacity:1" />
+        </radialGradient>
+        <linearGradient id="reinforcementGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#337755;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#195;stop-opacity:1" />
+        </linearGradient>
+
+        <filter id="shadow" x="-0.1" y="-0.1" width="1.2" height="1.2">
+            <feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.5"/>
         </filter>
 
         <g id="base">
             <!-- Main Foundation -->
-            <rect x="-20" y="-20" width="40" height="40" 
-                  fill="#2a6" stroke="#195" stroke-width="3" 
+            <rect x="-20" y="-20" width="40" height="40"
+                  fill="#2a6" stroke="#195" stroke-width="3"
                   rx="4" ry="4" />
             
             <!-- Defensive Walls -->
-            <path d="M-24,-24 L24,-24 L24,24 L-24,24 L-24,-24" 
-                  fill="none" stroke="#3c7" stroke-width="2" 
+            <path d="M-24,-24 L24,-24 L24,24 L-24,24 L-24,-24"
+                  fill="none" stroke="#3c7" stroke-width="2"
                   stroke-dasharray="4 2" />
             
             <!-- Corner Towers -->
-            <circle cx="-16" cy="-16" r="6" fill="#195" stroke="#000" stroke-width="1" />
-            <circle cx="16" cy="-16" r="6" fill="#195" stroke="#000" stroke-width="1" />
-            <circle cx="-16" cy="16" r="6" fill="#195" stroke="#000" stroke-width="1" />
-            <circle cx="16" cy="16" r="6" fill="#195" stroke="#000" stroke-width="1" />
+            <circle cx="-16" cy="-16" r="5" fill="url(#towerGradient)" stroke="#000" stroke-width="1" />
+            <circle cx="16" cy="-16" r="5" fill="url(#towerGradient)" stroke="#000" stroke-width="1" />
+            <circle cx="-16" cy="16" r="5" fill="url(#towerGradient)" stroke="#000" stroke-width="1" />
+            <circle cx="16" cy="16" r="5" fill="url(#towerGradient)" stroke="#000" stroke-width="1" />
             
             <!-- Central Core -->
-            <circle cx="0" cy="0" r="12" 
-                    fill="#3c7" stroke="#195" stroke-width="2" 
-                    filter="url(#baseGlow)" />
+            <circle cx="0" cy="0" r="12"
+                    fill="url(#coreGradient)" stroke="#195" stroke-width="2"/>
+            <circle cx="0" cy="0" r="14"
+                    fill="none" stroke="#7cf" stroke-width="1"
+                    opacity="0.3" />
             
             <!-- Energy Shield Pattern -->
-            <circle cx="0" cy="0" r="8" 
-                    fill="none" stroke="#7cf" stroke-width="1" 
+            <circle cx="0" cy="0" r="8"
+                    fill="none" stroke="#7cf" stroke-width="1"
                     opacity="0.6" />
+            <circle cx="0" cy="0" r="10"
+                    fill="none" stroke="#7cf" stroke-width="0.8"
+                    opacity="0.4" />
             
             <!-- Reinforcement Details -->
-            <rect x="-12" y="-2" width="24" height="4" fill="#195" />
-            <rect x="-2" y="-12" width="4" height="24" fill="#195" />
+            <rect x="-12" y="-2" width="24" height="4" fill="url(#reinforcementGradient)" />
+            <rect x="-2" y="-12" width="4" height="24" fill="url(#reinforcementGradient)" />
+            <g style="filter:url(#shadow)">
+                <use href="#base"/>
+            </g>
         </g>
     </defs>
     

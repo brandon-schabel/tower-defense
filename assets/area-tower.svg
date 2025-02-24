@@ -2,21 +2,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
     <!-- Basic Tower (64x64) -->
     <defs>
+        <!-- Radial Gradient for Central Sphere -->
+        <radialGradient id="sphereGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" style="stop-color:#fffc80;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#ee4;stop-opacity:1" />
+        </radialGradient>
+
+        <radialGradient id="glowGradient">
+            <stop offset="0%" style="stop-color:rgba(255,255,100,0.8);stop-opacity:1" />
+            <stop offset="100%" style="stop-color:rgba(255,255,100,0);stop-opacity:0" />
+        </radialGradient>
+
+        <!-- Linear Gradient for Hexagonal Base -->
+        <linearGradient id="baseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#ffd700;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#cc3;stop-opacity:1" />
+        </linearGradient>
+
         <!-- Area Tower (64x64) -->
         <g id="area-tower">
             <!-- Hexagonal Base -->
-            <path d="M32 44 L22 39 L22 29 L32 24 L42 29 L42 39 Z" fill="#cc3" stroke="#000" stroke-width="2" />
+            <path d="M32 44 L22 39 L22 29 L32 24 L42 29 L42 39 Z" fill="url(#baseGradient)" stroke="#000" stroke-width="2" />
             <!-- Center Sphere -->
-            <circle cx="32" cy="34" r="8" fill="#ee4" stroke="#000" stroke-width="2" />
+            <circle cx="32" cy="34" r="8" fill="url(#sphereGradient)" stroke="#000" stroke-width="2" />
             <!-- Energy Rings -->
-            <ellipse cx="32" cy="34" rx="12" ry="4" fill="none" stroke="#aa2" stroke-width="1" opacity="0.6" />
-            <ellipse cx="32" cy="34" rx="10" ry="3" fill="none" stroke="#aa2" stroke-width="1" opacity="0.8" />
+            <ellipse cx="32" cy="34" rx="12" ry="4" fill="none" stroke="#dd5" stroke-width="1.5" opacity="0.7" />
+            <ellipse cx="32" cy="34" rx="10" ry="3" fill="none" stroke="#ee6" stroke-width="1.2" opacity="0.9" />
             <!-- Center Point -->
-            <circle cx="32" cy="34" r="3" fill="#aa2" />
+            <circle cx="32" cy="34" r="3" fill="#fff" />
             <!-- Energy Particles -->
-            <circle cx="28" cy="32" r="1" fill="#aa2" />
-            <circle cx="36" cy="36" r="1" fill="#aa2" />
-            <circle cx="32" cy="38" r="1" fill="#aa2" />
+            <circle cx="28" cy="32" r="1.5" fill="#ff6" opacity="0.9" />
+            <circle cx="36" cy="36" r="1" fill="#ee5" opacity="0.8" />
+            <circle cx="32" cy="38" r="0.8" fill="#dd4" opacity="0.7" />
+            <circle cx="30" cy="30" r="0.5" fill="#cc3" opacity="0.6" />
+            <circle cx="34" cy="32" r="0.7" fill="#bb2" opacity="0.8" />
+            <circle cx="32" cy="34" r="12" fill="url(#glowGradient)" />
         </g>
     </defs>
 

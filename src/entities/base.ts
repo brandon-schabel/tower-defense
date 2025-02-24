@@ -1,17 +1,23 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 import { HealthBar } from "../utils/health-bar";
+import { GAME_SETTINGS } from "../settings"; // Import
 
 export default class Base extends Phaser.Physics.Arcade.Sprite {
     private healthBar: HealthBar;
-    private health: number = 100;
-    private maxHealth: number = 100;
+    private health: number = GAME_SETTINGS.base.initialHealth; // Use from settings
+    private maxHealth: number = GAME_SETTINGS.base.initialHealth; // Use from settings
 
     constructor(scene: GameScene, x: number, y: number) {
         super(scene, x, y, "base");
 
         scene.add.existing(this);
         scene.physics.add.existing(this, true);
+
+        // Set size, color, and position from settings
+        this.setDisplaySize(GAME_SETTINGS.base.size.width, GAME_SETTINGS.base.size.height);
+        this.setTint(GAME_SETTINGS.base.color);
+        this.setPosition(GAME_SETTINGS.base.position.x, GAME_SETTINGS.base.position.y);
 
         // Create health bar
         this.healthBar = new HealthBar(scene, this, this.maxHealth);

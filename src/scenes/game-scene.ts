@@ -1,11 +1,11 @@
 import Phaser from "phaser";
-import User from "../entities/user";
+import Player from "../entities/player";
 import Base from "../entities/base";
 import HUD from "../ui/hud";
 import GameState from "../utils/game-state";
-import { TOWER_TYPES } from "../ui/hud";
 import Tower from "../entities/tower";
 import Enemy from "../entities/enemy";
+import { GAME_SETTINGS, TowerType } from "../settings";
 
 type SceneInitData = {
     isNewGame: boolean;
@@ -13,18 +13,21 @@ type SceneInitData = {
 
 export default class GameScene extends Phaser.Scene {
     private gameState!: GameState;
-    private user!: User;
+    private user!: Player;
     private base!: Base;
     private hud!: HUD;
     private isBuildModeActive: boolean = false;
     private ghostTower: Phaser.GameObjects.Sprite | null = null;
-    private selectedTowerType: string | null = null;
+    private selectedTowerType: TowerType | null = null;
     private enemies?: Phaser.Physics.Arcade.Group;
     private towers?: Phaser.Physics.Arcade.Group;
     private projectiles?: Phaser.Physics.Arcade.Group;
     private currentRound: number = 0;
     private gameOverHandled = false;
     private isRoundEnding: boolean = false;
+    private selectedTower: Tower | null = null;
+    private upgradePanel: Phaser.GameObjects.Container | null = null;
+    private rangeCircle: Phaser.GameObjects.Graphics | null = null;
 
     constructor() {
         super({ key: "GameScene" });
@@ -34,7 +37,7 @@ export default class GameScene extends Phaser.Scene {
         // Load assets
         this.load.svg("user", "/assets/user.svg");
         this.load.svg("base", "/assets/base.svg");
-        Object.entries(TOWER_TYPES).forEach(([key, data]) => {
+        Object.entries(GAME_SETTINGS.towers).forEach(([key, data]) => {
             this.load.svg(key, `/assets/${data.texture}.svg`);
         });
         this.load.svg("projectile", "/assets/projectile.svg");
@@ -53,50 +56,46 @@ export default class GameScene extends Phaser.Scene {
 
     create() {
         // Create game objects
-        this.createGameObjects();
-        
+        this.add.rectangle(0, 0, 800, 600, 0x333333).setOrigin(0);
+        this.base = new Base(this, 400, 300);
+        this.user = new Player(this, 200, 200);
+
         // Set up physics groups
-        this.setupPhysics();
-        
+        this.enemies = this.physics.add.group();
+        this.towers = this.physics.add.group({ immovable: true }); // Towers are static
+        this.projectiles = this.physics.add.group();
+
         // Initialize HUD
         this.hud = new HUD(this);
-        
+
         // Set up input handlers
         this.setupInputHandlers();
-        
+
         // Set up collisions
         this.setupCollisions();
 
         // Add timer for enemy target recalculation
         this.time.addEvent({
-            delay: 1000, // Every 1000ms (1 second)
+            delay: GAME_SETTINGS.game.enemyTargetRecalculationInterval,
             callback: () => {
                 this.recalculateEnemyTargets();
             },
-            loop: true // Repeat indefinitely
+            loop: true
         });
-    }
-
-    private createGameObjects() {
-        this.add.rectangle(0, 0, 800, 600, 0x333333).setOrigin(0);
-        this.base = new Base(this, 400, 300);
-        this.user = new User(this, 200, 200);
-
-        // Add a test sprite to check physics
-        const testSprite = this.physics.add.sprite(100, 100, "projectile");
-        testSprite.setVelocity(100, 0); // Should move right
-    }
-
-    private setupPhysics() {
-        this.enemies = this.physics.add.group();
-        this.towers = this.physics.add.group({ immovable: true }); // Towers are static
-        this.projectiles = this.physics.add.group();
     }
 
     private setupInputHandlers() {
         this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
             if (this.isBuildModeActive && this.selectedTowerType) {
                 this.placeTower(pointer.x, pointer.y);
+            } else {
+                const towers = this.towers?.getChildren() as Tower[];
+                const clickedTower = towers.find(tower => tower.getBounds().contains(pointer.x, pointer.y));
+                if (clickedTower) {
+                    this.selectTower(clickedTower);
+                } else {
+                    this.deselectTower();
+                }
             }
         });
 
@@ -106,10 +105,14 @@ export default class GameScene extends Phaser.Scene {
             }
         });
 
-        // Add escape key listener
-        this.input.keyboard!.on('keydown-ESC', () => { // Use 'keydown-ESC'
+        // Add escape key listener, also handle closing upgrade panel
+        this.input.keyboard!.on('keydown-ESC', () => {
             if (this.isBuildModeActive) {
                 this.exitBuildMode();
+            } else if (this.upgradePanel) { // Close upgrade panel if active
+                this.upgradePanel.destroy();
+                this.upgradePanel = null;
+                this.selectedTower = null;
             }
         });
     }
@@ -137,7 +140,7 @@ export default class GameScene extends Phaser.Scene {
         this.updateTowers();
         this.updateEnemies();
         this.updateProjectiles();
-        
+
         if (this.enemies && this.enemies.countActive() === 0 && this.currentRound > 0 && !this.isRoundEnding) {
             this.isRoundEnding = true;
             this.onRoundComplete();
@@ -156,6 +159,7 @@ export default class GameScene extends Phaser.Scene {
     private updateEnemies() {
         if (!this.enemies) return;
 
+        const settings = GAME_SETTINGS.enemies;
         this.enemies.getChildren().forEach((enemy: Phaser.GameObjects.GameObject) => {
             const enemySprite = enemy as Enemy; // Cast to Enemy, not Sprite
             let target = enemySprite.getData("target") as Phaser.Physics.Arcade.Sprite;
@@ -175,20 +179,23 @@ export default class GameScene extends Phaser.Scene {
                 const dy = target.y - enemySprite.y;
                 const distance = Math.hypot(dx, dy);
 
-                if (distance > 20) {
-                    const speed = enemySprite.getData("speed") || 2;
+                if (distance > settings.attackDistance) {
+                    // Factor in slowFactor
+                    const baseSpeed = enemySprite.getData("speed") || settings.speed;
+                    const slowFactor = enemySprite.getData("slowFactor") || 1;
+                    const speed = baseSpeed * slowFactor;
                     this.physics.moveTo(enemySprite, target.x, target.y, speed * 20);
                 } else {
                     enemySprite.setVelocity(0, 0);
                     const currentTime = this.time.now;
                     const lastDamageTime = enemySprite.getData("lastDamageTime") || 0; // Get lastDamageTime
-                    if (currentTime - lastDamageTime >= 1000) { // 1-second cooldown
-                        if (target instanceof User) {
-                            target.takeDamage(1);
+                    if (currentTime - lastDamageTime >= settings.attackCooldown) {
+                        if (target instanceof Player) {
+                            target.takeDamage(settings.damageToPlayer);
                         } else if (target instanceof Tower) {
-                            target.takeDamage(10);
+                            target.takeDamage(settings.damageToTowers);
                         } else if (target instanceof Base) {
-                            target.takeDamage(10);
+                            target.takeDamage(settings.damageToBase);
                         }
                         enemySprite.setData("lastDamageTime", currentTime); // Update lastDamageTime
                     }
@@ -210,7 +217,7 @@ export default class GameScene extends Phaser.Scene {
                 const dy = target.y - projectileSprite.y;
                 const distance = Math.hypot(dx, dy);
 
-                if (distance < 5) {
+                if (distance < GAME_SETTINGS.projectiles.hitDistance) {
                     projectileSprite.destroy();
                 }
             } else {
@@ -235,7 +242,11 @@ export default class GameScene extends Phaser.Scene {
     }
 
     private spawnEnemies() {
-        const enemyCount = Math.min(5 + this.currentRound * 2, 20);
+        const settings = GAME_SETTINGS.enemies;
+        const enemyCount = Math.min(
+            settings.baseCount + this.currentRound * settings.countIncrementPerRound,
+            settings.maxCount
+        );
         for (let i = 0; i < enemyCount; i++) {
             setTimeout(() => {
                 if (!this.enemies) return;
@@ -243,34 +254,35 @@ export default class GameScene extends Phaser.Scene {
                     this,
                     0,
                     Phaser.Math.Between(100, 500),
-                    50 + this.currentRound * 10,
-                    2,
+                    settings.baseHealth + this.currentRound * settings.healthIncrementPerRound,
+                    settings.speed,
                     () => this.onEnemyKilled()
                 );
                 this.enemies.add(enemy);
-            }, i * 1000);
+            }, i * settings.spawnInterval);
         }
     }
 
     private onEnemyKilled() {
-        const resourcesGained = this.currentRound * 5;
+        const resourcesGained = GAME_SETTINGS.resources.perEnemyKillBase * this.currentRound;
         this.gameState.earnResources(resourcesGained);
         this.hud.updateResources();
     }
 
     private onRoundComplete() {
-        this.gameState.earnResources(100 * this.currentRound);
+        const resourcesGained = GAME_SETTINGS.resources.perRoundCompletionBase * this.currentRound;
+        this.gameState.earnResources(resourcesGained);
         this.hud.updateResources();
         this.hud.showNextRoundButton(() => {
-            this.user.heal(20);
+            this.user.heal(GAME_SETTINGS.player.healPerRound);
             this.startRound();
         });
     }
 
-    enterBuildMode(towerType: string) {
+    enterBuildMode(towerType: TowerType) {
         if (this.isBuildModeActive) return;
 
-        const towerData = TOWER_TYPES[towerType];
+        const towerData = GAME_SETTINGS.towers[towerType];
         if (!towerData) {
             console.log('Invalid tower type selected');
             return;
@@ -293,7 +305,7 @@ export default class GameScene extends Phaser.Scene {
     private placeTower(x: number, y: number) {
         if (!this.selectedTowerType || !this.towers) return;
 
-        const towerData = TOWER_TYPES[this.selectedTowerType];
+        const towerData = GAME_SETTINGS.towers[this.selectedTowerType];
         if (!towerData || !this.gameState.spendResources(towerData.price)) {
             console.log(`Failed to place ${this.selectedTowerType}: Insufficient resources`);
             this.exitBuildMode();
@@ -334,40 +346,205 @@ export default class GameScene extends Phaser.Scene {
         return nearest;
     }
 
-    public shootProjectile(source: Phaser.Physics.Arcade.Sprite, target: Phaser.Physics.Arcade.Sprite, towerData: typeof TOWER_TYPES[keyof typeof TOWER_TYPES]) {
+    public shootProjectile(source: Phaser.Physics.Arcade.Sprite, target: Phaser.Physics.Arcade.Sprite, damage: number, specialEffect?: { type: "fire" | "ice" | "critical", params: any }) {
         if (!this.projectiles) return;
 
         const projectile = this.projectiles.create(source.x, source.y, 'projectile');
         projectile.setScale(0.5);
         const angle = Phaser.Math.Angle.Between(source.x, source.y, target.x, target.y);
 
-        projectile.setData('damage', towerData.damage);
+        projectile.setData('damage', damage);
         projectile.setData('target', target);
+        if (specialEffect) {
+            projectile.setData('specialEffect', specialEffect);
+            switch (specialEffect.type) {
+                case 'fire':
+                    projectile.setTint(0xff0000); // Red
+                    break;
+                case 'ice':
+                    projectile.setTint(0x00ffff); // Cyan
+                    break;
+                case 'critical':
+                    projectile.setTint(0xffff00); // Yellow
+                    break;
+            }
+        }
 
-        this.physics.velocityFromRotation(angle, 300, projectile.body.velocity);
+        // --- Get Projectile Speed ---
+        let projectileSpeed: number = GAME_SETTINGS.projectiles.speed; // Default speed
+
+        if (source instanceof Tower) {
+            const towerType = source.getTowerType();
+            const projectileType = GAME_SETTINGS.towers[towerType].projectileType;
+            projectileSpeed = GAME_SETTINGS.projectiles[projectileType].speed as number;
+        } // else if ... (You can add conditions for player projectiles here later)
+
+        this.physics.velocityFromRotation(angle, projectileSpeed, projectile.body.velocity);
     }
 
     private onProjectileHitEnemy(projectile: Phaser.Physics.Arcade.Sprite, enemy: Phaser.Physics.Arcade.Sprite) {
         const damage = projectile.getData('damage') || 20; // Default to 20 if not set
         (enemy as Enemy).takeDamage(damage);
+
+        // Apply special effects
+        const specialEffect = projectile.getData('specialEffect');
+        if (specialEffect) {
+            if (specialEffect.type === 'fire') {
+                (enemy as Enemy).applyBurnEffect(specialEffect.params.burnDamage);
+            } else if (specialEffect.type === 'ice') {
+                (enemy as Enemy).applySlowEffect(specialEffect.params.slowFactor, specialEffect.params.duration);
+            }
+        }
+
         projectile.destroy();
+    }
+
+    public selectTower(tower: Tower) {
+        this.selectedTower = tower;
+        this.hud.updateTowerStats(tower);
+        this.showUpgradePanel(tower);
+        this.showRangeCircle(tower);
+    }
+
+    private showUpgradePanel(tower: Tower) {
+        if (this.upgradePanel) {
+            this.upgradePanel.destroy();
+        }
+
+        this.upgradePanel = this.add.container(150, 100); // Adjusted position for visibility
+
+        // Background with rounded corners and semi-transparency
+        const bg = this.add.graphics();
+        bg.fillStyle(0x000000, 0.8);
+        bg.fillRoundedRect(0, 0, 250, 350, 10);
+        this.upgradePanel.add(bg);
+
+        // Title
+        const title = this.add.text(125, 20, 'Upgrade Tower', {
+            fontSize: '20px',
+            color: '#ffffff'
+        }).setOrigin(0.5);
+        this.upgradePanel.add(title);
+
+        // Upgrade options
+        const upgrades: { type: "speed" | "range" | "damage"; label: string }[] = [
+            { type: 'speed', label: 'Speed' },
+            { type: 'range', label: 'Range' },
+            { type: 'damage', label: 'Damage' }
+        ];
+
+        upgrades.forEach((upgrade, index) => {
+            const yPos = 60 + index * 40;
+            // Access levels directly using the type
+            const level = tower.getSpeedLevel();
+            const cost = tower.getUpgradeCost(upgrade.type);
+            const buttonText = `${upgrade.label} (Lv.${level}) - ${cost}`;
+
+            const button = this.add.text(20, yPos, buttonText, {
+                fontSize: '16px',
+                color: '#ffffff'
+            }).setWordWrapWidth(210); // Wrap text within panel width
+            button.setInteractive();
+            // Call upgradeTower with the correct type
+            button.on('pointerdown', () => this.upgradeTower(tower, upgrade.type));
+            button.on('pointerover', () => button.setStyle({ color: '#ffff00' }));
+            button.on('pointerout', () => button.setStyle({ color: '#ffffff' }));
+
+            if (level >= tower.getMaxUpgradeLevel() || !this.gameState.canAfford(cost)) {
+                button.setStyle({ color: '#888888' });
+                button.disableInteractive();
+            }
+            this.upgradePanel?.add(button);
+        });
+
+        // Special powers (if none selected)
+        if (!tower.getSpecialPower()) {
+            const specialPowers: { type: "fire" | "ice" | "critical"; label: string; color: string; }[] = [
+                { type: 'fire', label: 'Fire', color: '#ff0000' },
+                { type: 'ice', label: 'Ice', color: '#00ffff' },
+                { type: 'critical', label: 'Critical', color: '#ffff00' }
+            ];
+
+            specialPowers.forEach((power, index) => {
+                const yPos = 180 + index * 30;
+                const button = this.add.text(20, yPos, `${power.label} - 500`, {
+                    fontSize: '16px',
+                    color: power.color
+                });
+                button.setInteractive();
+                // Call purchaseSpecialPower with the correct type
+                button.on('pointerdown', () => this.purchaseSpecialPower(tower, power.type));
+                button.on('pointerover', () => button.setStyle({ color: '#ffffff' }));
+                button.on('pointerout', () => button.setStyle({ color: power.color }));
+
+                if (!this.gameState.canAfford(500)) {
+                    button.setStyle({ color: '#888888' });
+                    button.disableInteractive();
+                }
+                if (this.upgradePanel) { // Check if upgradePanel is null before adding
+                    this.upgradePanel.add(button);
+                }
+            });
+        }
+
+        // Close button
+        const closeButton = this.add.text(230, 10, 'X', {
+            fontSize: '16px',
+            color: '#ff0000'
+        });
+        closeButton.setInteractive();
+        closeButton.on('pointerdown', () => {
+            this.upgradePanel?.destroy();
+            this.upgradePanel = null;
+            this.selectedTower = null;
+        });
+        if (this.upgradePanel) {
+            this.upgradePanel.add(closeButton);
+        }
+
+        // Simple animation
+        this.upgradePanel.setScale(0.9);
+        this.tweens.add({
+            targets: this.upgradePanel,
+            scale: 1,
+            duration: 200,
+            ease: 'Power2'
+        });
+    }
+
+    private upgradeTower(tower: Tower, upgradeType: "speed" | "range" | "damage") {
+        const cost = tower.getUpgradeCost(upgradeType);
+        if (this.gameState.canAfford(cost)) {
+            this.gameState.spendResources(cost);
+            tower.upgrade(upgradeType);
+            this.hud.updateResources();
+            this.showUpgradePanel(tower); // Refresh the panel to update costs/levels
+            this.hud.updateTowerStats(tower);
+        }
+    }
+
+    private purchaseSpecialPower(tower: Tower, powerType: "fire" | "ice" | "critical") {
+        if (this.gameState.canAfford(tower.getSpecialPowerCost())) {
+            this.gameState.spendResources(tower.getSpecialPowerCost());
+            tower.setSpecialPower(powerType);
+            this.hud.updateResources();
+            this.showUpgradePanel(tower); // Refresh panel
+            this.hud.updateTowerStats(tower);
+        }
     }
 
     getGameState() {
         return this.gameState;
     }
 
-    // Getter for base
     public getBase(): Base {
         return this.base;
     }
 
-    // Getter for user
-    public getUser(): User {
+    public getUser(): Player {
         return this.user;
     }
 
-    // Getter for currentRound
     public getCurrentRound(): number {
         return this.currentRound;
     }
@@ -433,13 +610,37 @@ export default class GameScene extends Phaser.Scene {
         });
     }
 
-    // Add this public method to remove towers
     public removeTower(tower: Tower) {
         this.towers?.remove(tower, true, true);
     }
 
-    // Add a public method to force enemy update
     public forceEnemyUpdate() {
         this.updateEnemies();
+    }
+
+    private showRangeCircle(tower: Tower) {
+        if (this.rangeCircle) {
+            this.rangeCircle.destroy();
+        }
+        this.rangeCircle = this.add.graphics();
+        this.rangeCircle.lineStyle(2, 0xffffff, 0.5); // White, semi-transparent
+        this.rangeCircle.strokeCircle(tower.x, tower.y, tower.getCurrentRange());
+    }
+
+    public deselectTower() {
+        if (this.rangeCircle) {
+            this.rangeCircle.destroy();
+            this.rangeCircle = null;
+        }
+        this.selectedTower = null;
+        this.hud.updateTowerStats(null);
+        if (this.upgradePanel) {
+            this.upgradePanel.destroy();
+            this.upgradePanel = null;
+        }
+    }
+
+    public getSelectedTower(): Tower | null {
+        return this.selectedTower;
     }
 }

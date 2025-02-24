@@ -1,14 +1,15 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 import { HealthBar } from "../utils/health-bar";
+import { GAME_SETTINGS } from "../settings"; // Import
 
-export default class User extends Phaser.Physics.Arcade.Sprite {
-  private health: number = 100;
-  private maxHealth: number = 100;
-  private movementSpeed: number = 200;
-  private shootRange: number = 200;
+export default class Player extends Phaser.Physics.Arcade.Sprite {
+  private health: number = GAME_SETTINGS.player.initialHealth; // Use from settings
+  private maxHealth: number = GAME_SETTINGS.player.initialHealth; // Use from settings
+  private movementSpeed: number = GAME_SETTINGS.player.movementSpeed; // Use from settings
+  // private shootRange: number = GAME_SETTINGS.player.shootRange; // Use from settings
   private lastShotTime: number = 0;
-  private shootCooldown: number = 200; // 200ms between shots
+  private shootCooldown: number = GAME_SETTINGS.player.shootCooldown; // Use from settings
   private healthBar: HealthBar;
   private keys: { up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key; left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key; shoot: Phaser.Input.Keyboard.Key; };
 
@@ -92,24 +93,13 @@ export default class User extends Phaser.Physics.Arcade.Sprite {
     // Create a temporary physics target sprite at the mouse position
     const target = this.scene.physics.add.sprite(targetX, targetY, 'projectile');
     target.setVisible(false); // Hide the target sprite
-    
-    // Use the scene's shootProjectile method
-    (this.scene as GameScene).shootProjectile(
-        this,  // source
-        target, // target
-        {
-            name: 'User Projectile',
-            price: 0,
-            texture: 'projectile',
-            range: this.shootRange,
-            damage: 20,
-            health: 1
-        }
-    );
+
+    // Pass damage directly to shootProjectile
+    (this.scene as GameScene).shootProjectile(this, target, GAME_SETTINGS.player.projectileDamage);
 
     // Clean up the temporary target sprite
     this.scene.time.delayedCall(100, () => {
-        target.destroy();
+      target.destroy();
     });
   }
 }

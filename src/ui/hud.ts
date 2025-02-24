@@ -1,42 +1,6 @@
-// src/ui/hud.ts
-import Phaser from "phaser";
+import Tower from "../entities/tower";
 import GameScene from "../scenes/game-scene";
-
-export type TowerData = {
-  name: string;
-  price: number;
-  texture: string;
-  range: number;
-  damage: number;
-  health: number;
-};
-
-export const TOWER_TYPES: { [key: string]: TowerData } = {
-  'normal-tower': {
-    name: 'Normal Tower',
-    price: 100,
-    texture: 'normal-tower',
-    range: 150,
-    damage: 10,
-    health: 100
-  },
-  'sniper-tower': {
-    name: 'Sniper Tower',
-    price: 200,
-    texture: 'sniper-tower',
-    range: 300,
-    damage: 25,
-    health: 80
-  },
-  'area-tower': {
-    name: 'Area Tower',
-    price: 150,
-    texture: 'area-tower',
-    range: 100,
-    damage: 15,
-    health: 120
-  }
-};
+import { GAME_SETTINGS, TowerType } from "../settings";
 
 export default class HUD {
   private gameScene: GameScene;
@@ -45,6 +9,7 @@ export default class HUD {
   private pauseButton: HTMLButtonElement;
   private menuButton: HTMLButtonElement;
   private towerButtons: HTMLElement;
+  private towerStatsDisplay: HTMLElement;
 
   constructor(scene: GameScene) {
     this.gameScene = scene;
@@ -55,6 +20,7 @@ export default class HUD {
     this.pauseButton = document.getElementById('pause') as HTMLButtonElement;
     this.menuButton = document.getElementById('menu') as HTMLButtonElement;
     this.towerButtons = document.getElementById('tower-buttons') as HTMLElement;
+    this.towerStatsDisplay = document.getElementById('tower-stats') || this.createTowerStatsDisplay();
 
     // Initialize tower buttons
     this.initializeTowerButtons();
@@ -73,16 +39,42 @@ export default class HUD {
     return display;
   }
 
+  private createTowerStatsDisplay(): HTMLElement {
+    const display = document.createElement('div');
+    display.id = 'tower-stats';
+    display.className = 'tower-stats';
+    document.body.appendChild(display);
+    return display;
+  }
+
+  public updateTowerStats(tower: Tower | null) {
+    if (!tower) {
+      this.towerStatsDisplay.innerHTML = '';
+      return;
+    }
+
+    const stats = `
+      <h3>${tower.towerType}</h3>
+      <p>Health: ${tower.getHealth()}/${tower.getMaxHealth()}</p>
+      <p>Damage: ${tower.getCurrentDamage()}</p>
+      <p>Range: ${tower.getCurrentRange()}</p>
+      <p>Speed: ${tower.getShootCooldown()} ms</p>
+      <p>Upgrades: Speed Lv.${tower.getSpeedLevel()}, Range Lv.${tower.getRangeLevel()}, Damage Lv.${tower.getDamageLevel()}</p>
+      ${tower.getSpecialPower() ? `<p>Special: ${tower.getSpecialPower()}</p>` : ''}
+    `;
+    this.towerStatsDisplay.innerHTML = stats;
+  }
+
   private initializeTowerButtons() {
     this.towerButtons.innerHTML = '';
-    Object.entries(TOWER_TYPES).forEach(([type, data]) => {
+    Object.entries(GAME_SETTINGS.towers).forEach(([type, data]) => {
       const button = document.createElement('button');
       button.className = 'tower-button';
       button.innerHTML = `
         <img src="/assets/${data.texture}.svg" alt="${data.name}" />
         <span class="price">${data.price}</span>
       `;
-      button.addEventListener('click', () => this.gameScene.enterBuildMode(type));
+      button.addEventListener('click', () => this.gameScene.enterBuildMode(type as TowerType));
       this.towerButtons.appendChild(button);
     });
   }
@@ -142,13 +134,14 @@ export default class HUD {
     this.resourcesDisplay.textContent = `Resources: ${resources}`;
     console.log(`HUD updated. Resources: ${resources}`);
 
-    // Update tower button states
     this.towerButtons.querySelectorAll('.tower-button').forEach((button) => {
       const buttonEl = button as HTMLButtonElement;
       const towerName = buttonEl.querySelector('img')?.alt || '';
-      const towerType = Object.keys(TOWER_TYPES).find(key => TOWER_TYPES[key].name === towerName);
+      const towerType = Object.keys(GAME_SETTINGS.towers).find(
+        towerType => GAME_SETTINGS.towers[towerType as TowerType].name === towerName
+      );
       if (towerType) {
-        const price = TOWER_TYPES[towerType].price;
+        const price = GAME_SETTINGS.towers[towerType as TowerType].price;
         buttonEl.disabled = resources < price;
       }
     });

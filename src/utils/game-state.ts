@@ -1,5 +1,7 @@
+import { GAME_SETTINGS } from "../settings"; // Import
+
 export default class GameState {
-  private resources: number = 100;
+  private resources: number = GAME_SETTINGS.resources.initialAmount; // Use from settings
 
   getResources() {
     return this.resources;
@@ -31,9 +33,9 @@ export default class GameState {
     const data = localStorage.getItem("game-state");
     if (data) {
       const parsed = JSON.parse(data);
-      this.resources = parsed.resources || 100;
+      this.resources = parsed.resources || GAME_SETTINGS.resources.initialAmount; //from settings
     } else {
-        this.resources = 100;
+      this.resources = GAME_SETTINGS.resources.initialAmount; //from settings
     }
   }
 }
