@@ -1,27 +1,34 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
+import { HealthBar } from "../utils/health-bar";
 
 export default class Base extends Phaser.Physics.Arcade.Sprite {
+    private healthBar: HealthBar;
     private health: number = 100;
     private maxHealth: number = 100;
-    private healthBar: Phaser.GameObjects.Graphics;
 
     constructor(scene: GameScene, x: number, y: number) {
         super(scene, x, y, "base");
+
         scene.add.existing(this);
-        scene.physics.add.existing(this, true); // true = static body
-        
+        scene.physics.add.existing(this, true);
+
         // Create health bar
-        this.healthBar = scene.add.graphics();
-        this.updateHealthBar();
+        this.healthBar = new HealthBar(scene, this, this.maxHealth);
     }
 
-    takeDamage(amount: number) {
-        this.health = Math.max(0, this.health - amount);
-        this.updateHealthBar();
-        
+    takeDamage(damage: number) {
+        if (!this.active) return;
+        this.health -= damage;
+        console.log(`Base took ${damage} damage. Health now: ${this.health}`);
+        this.healthBar.updateHealth(this.health);
         if (this.health <= 0) {
-            (this.scene as GameScene).scene.start("MainMenuScene");
+            console.log("Base health <= 0, destroying base and calling gameOver");
+            const gameScene = this.scene as GameScene;
+            this.healthBar.cleanup();
+            this.destroy();
+            console.log("Base destroyed!");
+            gameScene.gameOver();
         }
     }
 
@@ -31,23 +38,6 @@ export default class Base extends Phaser.Physics.Arcade.Sprite {
 
     heal(amount: number) {
         this.health = Math.min(this.health + amount, this.maxHealth);
-        this.updateHealthBar();
-    }
-
-    private updateHealthBar() {
-        this.healthBar.clear();
-
-        // Background of health bar
-        this.healthBar.fillStyle(0xff0000);
-        this.healthBar.fillRect(this.x - 25, this.y - 40, 50, 5);
-
-        // Health remaining
-        this.healthBar.fillStyle(0x00ff00);
-        this.healthBar.fillRect(
-            this.x - 25,
-            this.y - 40,
-            Math.max(0, (this.health / this.maxHealth) * 50),
-            5
-        );
+        this.healthBar.updateHealth(this.health);
     }
 }

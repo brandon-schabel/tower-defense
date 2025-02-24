@@ -19,10 +19,12 @@ export default class GameScene extends Phaser.Scene {
     private isBuildModeActive: boolean = false;
     private ghostTower: Phaser.GameObjects.Sprite | null = null;
     private selectedTowerType: string | null = null;
-    private enemies: Phaser.Physics.Arcade.Group | null = null;
-    private towers: Phaser.Physics.Arcade.Group | null = null;
-    public projectiles: Phaser.Physics.Arcade.Group | null = null;
+    private enemies?: Phaser.Physics.Arcade.Group;
+    private towers?: Phaser.Physics.Arcade.Group;
+    private projectiles?: Phaser.Physics.Arcade.Group;
     private currentRound: number = 0;
+    private gameOverHandled = false;
+    private isRoundEnding: boolean = false;
 
     constructor() {
         super({ key: "GameScene" });
@@ -79,6 +81,10 @@ export default class GameScene extends Phaser.Scene {
         this.add.rectangle(0, 0, 800, 600, 0x333333).setOrigin(0);
         this.base = new Base(this, 400, 300);
         this.user = new User(this, 200, 200);
+
+        // Add a test sprite to check physics
+        const testSprite = this.physics.add.sprite(100, 100, "projectile");
+        testSprite.setVelocity(100, 0); // Should move right
     }
 
     private setupPhysics() {
@@ -124,48 +130,26 @@ export default class GameScene extends Phaser.Scene {
             undefined,
             this
         );
-
-        // Enemies hit towers - Corrected to pass Tower type
-        this.physics.add.overlap(
-            this.enemies,
-            this.towers,
-            (enemy, tower) => { // Use simpler parameter names
-                this.onEnemyHitTower(
-                    enemy as Phaser.Physics.Arcade.Sprite,
-                    tower as Tower // Cast to Tower here
-                );
-            },
-            undefined,
-            this
-        );
-
-        // Enemies hit base
-        this.physics.add.overlap(
-            this.enemies,
-            this.base,
-            (enemy) => { // Use a simpler parameter name
-                this.onEnemyHitBase(enemy as Phaser.Physics.Arcade.Sprite);
-            },
-            undefined,
-            this
-        );
     }
 
-    update(time: number) {
+    update() {
         this.user.update();
         this.updateTowers();
         this.updateEnemies();
         this.updateProjectiles();
         
-        if (this.enemies && this.enemies.countActive() === 0 && this.currentRound > 0) {
+        if (this.enemies && this.enemies.countActive() === 0 && this.currentRound > 0 && !this.isRoundEnding) {
+            this.isRoundEnding = true;
             this.onRoundComplete();
         }
     }
 
     private updateTowers() {
         this.towers?.getChildren().forEach((tower: Phaser.GameObjects.GameObject) => {
-            const towerSprite = tower as Tower;
-            towerSprite.update();
+            if (tower.active) {
+                const towerSprite = tower as Tower;
+                towerSprite.update();
+            }
         });
     }
 
@@ -173,22 +157,17 @@ export default class GameScene extends Phaser.Scene {
         if (!this.enemies) return;
 
         this.enemies.getChildren().forEach((enemy: Phaser.GameObjects.GameObject) => {
-            const enemySprite = enemy as Phaser.Physics.Arcade.Sprite;
+            const enemySprite = enemy as Enemy; // Cast to Enemy, not Sprite
             let target = enemySprite.getData("target") as Phaser.Physics.Arcade.Sprite;
 
             if (!target || !target.active) {
-                const userDistance = Phaser.Math.Distance.Between(enemySprite.x, enemySprite.y, this.user.x, this.user.y);
-                if (userDistance < 100) {
-                    target = this.user;
-                } else {
-                    const nearestTower = this.findNearestTower(enemySprite.x, enemySprite.y, Infinity);
-                    if (nearestTower) {
-                        target = nearestTower;
-                    } else {
-                        target = this.base;
-                    }
+                this.recalculateEnemyTargets();
+                target = enemySprite.getData("target") as Phaser.Physics.Arcade.Sprite;
+                if (!target) {
+                    console.log(`Enemy ${enemySprite.id} has no target, stopping.`); // Now it works!
+                    enemySprite.setVelocity(0, 0);
+                    return;
                 }
-                enemySprite.setData("target", target);
             }
 
             if (target) {
@@ -201,12 +180,17 @@ export default class GameScene extends Phaser.Scene {
                     this.physics.moveTo(enemySprite, target.x, target.y, speed * 20);
                 } else {
                     enemySprite.setVelocity(0, 0);
-                    if (target instanceof User) {
-                        target.takeDamage(1);
-                    } else if (target instanceof Tower) {
-                        target.takeDamage(10);
-                    } else if (target instanceof Base) {
-                        target.takeDamage(10);
+                    const currentTime = this.time.now;
+                    const lastDamageTime = enemySprite.getData("lastDamageTime") || 0; // Get lastDamageTime
+                    if (currentTime - lastDamageTime >= 1000) { // 1-second cooldown
+                        if (target instanceof User) {
+                            target.takeDamage(1);
+                        } else if (target instanceof Tower) {
+                            target.takeDamage(10);
+                        } else if (target instanceof Base) {
+                            target.takeDamage(10);
+                        }
+                        enemySprite.setData("lastDamageTime", currentTime); // Update lastDamageTime
                     }
                 }
             }
@@ -220,7 +204,8 @@ export default class GameScene extends Phaser.Scene {
             const projectileSprite = projectile as Phaser.Physics.Arcade.Sprite;
             const target = projectileSprite.getData("target");
 
-            if (target) {
+            if (target instanceof Phaser.Physics.Arcade.Sprite) {
+                // Tower projectiles with dynamic targets (enemies)
                 const dx = target.x - projectileSprite.x;
                 const dy = target.y - projectileSprite.y;
                 const distance = Math.hypot(dx, dy);
@@ -229,6 +214,8 @@ export default class GameScene extends Phaser.Scene {
                     projectileSprite.destroy();
                 }
             } else {
+                // Player projectiles (fixed target position or no target)
+                // Check if off-screen
                 if (
                     projectileSprite.x < 0 ||
                     projectileSprite.x > Number(this.game.config.width) ||
@@ -242,6 +229,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     public startRound() {
+        this.isRoundEnding = false;
         this.currentRound++;
         this.spawnEnemies();
     }
@@ -251,14 +239,27 @@ export default class GameScene extends Phaser.Scene {
         for (let i = 0; i < enemyCount; i++) {
             setTimeout(() => {
                 if (!this.enemies) return;
-                const enemy = new Enemy(this, 0, Phaser.Math.Between(100, 500), 50 + this.currentRound * 10, 2);
+                const enemy = new Enemy(
+                    this,
+                    0,
+                    Phaser.Math.Between(100, 500),
+                    50 + this.currentRound * 10,
+                    2,
+                    () => this.onEnemyKilled()
+                );
                 this.enemies.add(enemy);
             }, i * 1000);
         }
     }
 
+    private onEnemyKilled() {
+        const resourcesGained = this.currentRound * 5;
+        this.gameState.earnResources(resourcesGained);
+        this.hud.updateResources();
+    }
+
     private onRoundComplete() {
-        this.gameState.earnResources(50 + this.currentRound * 10);
+        this.gameState.earnResources(100 * this.currentRound);
         this.hud.updateResources();
         this.hud.showNextRoundButton(() => {
             this.user.heal(20);
@@ -270,9 +271,14 @@ export default class GameScene extends Phaser.Scene {
         if (this.isBuildModeActive) return;
 
         const towerData = TOWER_TYPES[towerType];
-        if (!towerData || !this.gameState.canAfford(towerData.price)) {
+        if (!towerData) {
+            console.log('Invalid tower type selected');
+            return;
+        }
+
+        if (!this.gameState.canAfford(towerData.price)) {
             console.log('Not enough resources to select this tower');
-            this.exitBuildMode(); // Ensure build mode exits if already active, or cannot afford
+            this.exitBuildMode();  // Ensure build mode exits if already active, or cannot afford
             return;
         }
 
@@ -289,13 +295,15 @@ export default class GameScene extends Phaser.Scene {
 
         const towerData = TOWER_TYPES[this.selectedTowerType];
         if (!towerData || !this.gameState.spendResources(towerData.price)) {
+            console.log(`Failed to place ${this.selectedTowerType}: Insufficient resources`);
             this.exitBuildMode();
             return;
         }
 
         const tower = new Tower(this, x, y, this.selectedTowerType);
-        this.towers.add(tower, true); // Enable physics explicitly
+        this.towers.add(tower, true);
 
+        console.log(`Placed ${this.selectedTowerType}. Resources remaining: ${this.gameState.getResources()}`);
         this.hud.updateResources();
         this.exitBuildMode();
     }
@@ -309,25 +317,7 @@ export default class GameScene extends Phaser.Scene {
         }
     }
 
-    private findNearestEnemy(x: number, y: number, range: number): Phaser.Physics.Arcade.Sprite | null {
-        if (!this.enemies) return null;
-
-        let nearest: Phaser.Physics.Arcade.Sprite | null = null;
-        let nearestDistance = range;
-
-        this.enemies.getChildren().forEach((enemy: Phaser.GameObjects.GameObject) => {
-            const enemySprite = enemy as Phaser.Physics.Arcade.Sprite;
-            const distance = Phaser.Math.Distance.Between(x, y, enemySprite.x, enemySprite.y);
-            if (distance < nearestDistance) {
-                nearest = enemySprite;
-                nearestDistance = distance;
-            }
-        });
-
-        return nearest;
-    }
-
-    private findNearestTower(x: number, y: number, range: number): Phaser.Physics.Arcade.Sprite | null {
+    public findNearestTower(x: number, y: number, range: number): Phaser.Physics.Arcade.Sprite | null {
         if (!this.towers) return null;
 
         let nearest: Phaser.Physics.Arcade.Sprite | null = null;
@@ -358,23 +348,28 @@ export default class GameScene extends Phaser.Scene {
     }
 
     private onProjectileHitEnemy(projectile: Phaser.Physics.Arcade.Sprite, enemy: Phaser.Physics.Arcade.Sprite) {
-        const damage = projectile.getData('damage');
-        (enemy as Enemy).takeDamage(damage); // Cast to Enemy for method access
+        const damage = projectile.getData('damage') || 20; // Default to 20 if not set
+        (enemy as Enemy).takeDamage(damage);
         projectile.destroy();
-    }
-
-    private onEnemyHitTower(enemy: Phaser.Physics.Arcade.Sprite, tower: Tower) {
-        tower.takeDamage(10);
-        // Optionally, handle enemy behavior, e.g., stop moving or continue attacking
-    }
-
-    private onEnemyHitBase(enemy: Phaser.Physics.Arcade.Sprite) {
-        this.base.takeDamage(10);
-        enemy.destroy();
     }
 
     getGameState() {
         return this.gameState;
+    }
+
+    // Getter for base
+    public getBase(): Base {
+        return this.base;
+    }
+
+    // Getter for user
+    public getUser(): User {
+        return this.user;
+    }
+
+    // Getter for currentRound
+    public getCurrentRound(): number {
+        return this.currentRound;
     }
 
     getEnemies(): Phaser.Physics.Arcade.Sprite[] {
@@ -382,25 +377,69 @@ export default class GameScene extends Phaser.Scene {
         return this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[];
     }
 
-    private recalculateEnemyTargets() {
-        if (!this.enemies) return;
+    public recalculateEnemyTargets() {
+        if (!this.enemies || !this.towers) return;
 
-        this.enemies.getChildren().forEach((enemy: Phaser.GameObjects.GameObject) => {
-            const enemySprite = enemy as Phaser.Physics.Arcade.Sprite;
-            const userDistance = Phaser.Math.Distance.Between(enemySprite.x, enemySprite.y, this.user.x, this.user.y);
+        const towersLeft = this.towers.countActive(true);
 
-            let target: Phaser.Physics.Arcade.Sprite;
-            if (userDistance < 100) {
-                target = this.user;
+        this.enemies.getChildren().forEach((obj) => {
+            const enemy = obj as Phaser.Physics.Arcade.Sprite;
+            if (!enemy.active) return;
+
+            const distToUser = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.user.x, this.user.y);
+            let newTarget: Phaser.Physics.Arcade.Sprite | null = null;
+
+            if (distToUser < 100) {
+                newTarget = this.user;
             } else {
-                const nearestTower = this.findNearestTower(enemySprite.x, enemySprite.y, Infinity);
-                if (nearestTower) {
-                    target = nearestTower;
+                if (towersLeft > 0) {
+                    const nearestTower = this.findNearestTower(enemy.x, enemy.y, Infinity);
+                    newTarget = nearestTower || (this.base.active ? this.base : null); // Fallback to base if no tower
                 } else {
-                    target = this.base;
+                    newTarget = this.base.active ? this.base : null; // Always target base when no towers left, and check if base is active
                 }
             }
-            enemySprite.setData("target", target);
+
+            enemy.setData("target", newTarget);
         });
+    }
+
+    public gameOver() {
+        if (this.gameOverHandled) return;
+        this.gameOverHandled = true;
+
+        console.log("Game Over called");
+        this.physics.pause();
+        console.log("Physics paused");
+        this.enemies?.clear(true, true);
+        console.log("Enemies cleared");
+        this.towers?.clear(true, true);
+        console.log("Towers cleared");
+        this.projectiles?.clear(true, true);
+        console.log("Projectiles cleared");
+
+        const gameOverText = this.add.text(
+            Number(this.game.config.width) / 2,
+            Number(this.game.config.height) / 2,
+            "Game Over!",
+            { fontSize: "64px", color: "#ff0000" }
+        );
+        gameOverText.setOrigin(0.5);
+
+        this.time.delayedCall(3000, () => {
+            console.log("Restarting scene");
+            this.scene.restart({ isNewGame: true });
+            this.game.events.emit('end-game');
+        });
+    }
+
+    // Add this public method to remove towers
+    public removeTower(tower: Tower) {
+        this.towers?.remove(tower, true, true);
+    }
+
+    // Add a public method to force enemy update
+    public forceEnemyUpdate() {
+        this.updateEnemies();
     }
 }

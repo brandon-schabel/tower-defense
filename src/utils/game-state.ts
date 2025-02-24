@@ -8,8 +8,10 @@ export default class GameState {
   spendResources(amount: number): boolean {
     if (this.resources >= amount) {
       this.resources -= amount;
+      console.log(`Spent ${amount}. New total: ${this.resources}`);
       return true;
     }
+    console.log(`Not enough resources. Need ${amount}, have ${this.resources}`);
     return false;
   }
 
@@ -30,6 +32,8 @@ export default class GameState {
     if (data) {
       const parsed = JSON.parse(data);
       this.resources = parsed.resources || 100;
+    } else {
+        this.resources = 100;
     }
   }
 }

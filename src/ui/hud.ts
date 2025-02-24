@@ -2,35 +2,39 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 
-interface TowerData {
+export type TowerData = {
   name: string;
   price: number;
   texture: string;
   range: number;
   damage: number;
-}
+  health: number;
+};
 
-export const TOWER_TYPES: Record<string, TowerData> = {
+export const TOWER_TYPES: { [key: string]: TowerData } = {
   'normal-tower': {
     name: 'Normal Tower',
     price: 100,
     texture: 'normal-tower',
     range: 150,
-    damage: 10
+    damage: 10,
+    health: 100
   },
   'sniper-tower': {
     name: 'Sniper Tower',
     price: 200,
     texture: 'sniper-tower',
     range: 300,
-    damage: 25
+    damage: 25,
+    health: 80
   },
   'area-tower': {
     name: 'Area Tower',
     price: 150,
     texture: 'area-tower',
     range: 100,
-    damage: 15
+    damage: 15,
+    health: 120
   }
 };
 
@@ -136,13 +140,15 @@ export default class HUD {
   updateResources() {
     const resources = this.gameScene.getGameState().getResources();
     this.resourcesDisplay.textContent = `Resources: ${resources}`;
+    console.log(`HUD updated. Resources: ${resources}`);
 
     // Update tower button states
-    this.towerButtons.querySelectorAll('.tower-button').forEach((button: Element) => {
+    this.towerButtons.querySelectorAll('.tower-button').forEach((button) => {
       const buttonEl = button as HTMLButtonElement;
-      const towerType = buttonEl.querySelector('img')?.alt;
-      if (towerType && TOWER_TYPES[towerType.toLowerCase().replace(' ', '-')]) {
-        const price = TOWER_TYPES[towerType.toLowerCase().replace(' ', '-')].price;
+      const towerName = buttonEl.querySelector('img')?.alt || '';
+      const towerType = Object.keys(TOWER_TYPES).find(key => TOWER_TYPES[key].name === towerName);
+      if (towerType) {
+        const price = TOWER_TYPES[towerType].price;
         buttonEl.disabled = resources < price;
       }
     });

@@ -1,14 +1,15 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 import { TOWER_TYPES } from "../ui/hud";
+import { HealthBar } from "../utils/health-bar";
 
 export default class Tower extends Phaser.Physics.Arcade.Sprite {
     private towerType: string;
     private towerData: typeof TOWER_TYPES[keyof typeof TOWER_TYPES];
     private lastShotTime: number = 0;
     private shootCooldown: number = 500; // 500ms between shots
-    private healthBar: Phaser.GameObjects.Graphics;
-    private health: number = 100;
+    private healthBar: HealthBar;
+    private health: number;
     private maxHealth: number = 100;
 
     constructor(scene: GameScene, x: number, y: number, type: string) {
@@ -21,13 +22,15 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         scene.physics.add.existing(this, true); // true = static body
         this.setOrigin(0.5, 0.5); // Center the sprite
 
-        // Create health bar
-        this.healthBar = scene.add.graphics();
-        this.healthBar.setDepth(100); // Ensure health bar is above other elements
-        this.updateHealthBar();
+        this.maxHealth = this.towerData.health;
+        this.health = this.towerData.health;
+        this.healthBar = new HealthBar(scene, this, this.maxHealth);
     }
 
     update() {
+        if (!this.scene || !this.active) {
+            return;
+        }
         const currentTime = this.scene.time.now;
 
         if (this.towerType === 'area-tower') {
@@ -57,36 +60,35 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
                 this.lastShotTime = currentTime;
             }
         }
+        this.healthBar.updateHealth(this.health);
     }
 
-    takeDamage(amount: number) {
-        this.health = Math.max(0, this.health - amount);
-        this.updateHealthBar();
+    takeDamage(damage: number) {
+        if (!this.active) return; // Exit if the tower is already destroyed
+        this.health -= damage;
+        console.log(`${this.towerType} health: ${this.health}`);
+        this.healthBar.updateHealth(this.health);
         
         if (this.health <= 0) {
-            this.healthBar.destroy();
+            const gameScene = this.scene as GameScene;
+
+            // 1) Remove from group first using a public method
+            gameScene.removeTower(this);
+
+            // 2) Destroy the tower
+            this.healthBar.cleanup();
             this.destroy();
+            console.log(`${this.towerType} destroyed!`);
+
+            // 3) Force recalc
+            gameScene.recalculateEnemyTargets();
+
+            // 4) (Optional) Force immediate re-update.
+            gameScene.forceEnemyUpdate();
         }
     }
 
     getHealth(): number {
         return this.health;
-    }
-
-    private updateHealthBar() {
-        this.healthBar.clear();
-
-        // Background of health bar
-        this.healthBar.fillStyle(0xff0000);
-        this.healthBar.fillRect(this.x - 25, this.y - 40, 50, 5);
-
-        // Health remaining
-        this.healthBar.fillStyle(0x00ff00);
-        this.healthBar.fillRect(
-            this.x - 25,
-            this.y - 40,
-            Math.max(0, (this.health / this.maxHealth) * 50),
-            5
-        );
     }
 } 
