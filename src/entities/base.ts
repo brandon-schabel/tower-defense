@@ -1,12 +1,10 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import { HealthBar } from "../utils/health-bar";
+import { HealthComponent } from "../utils/health-component"; // Import HealthComponent
 import { GAME_SETTINGS } from "../settings"; // Import
 
 export default class Base extends Phaser.Physics.Arcade.Sprite {
-    private healthBar: HealthBar;
-    private health: number = GAME_SETTINGS.base.initialHealth; // Use from settings
-    private maxHealth: number = GAME_SETTINGS.base.initialHealth; // Use from settings
+    private healthComponent: HealthComponent; // Replace healthBar and health properties
 
     constructor(scene: GameScene, x: number, y: number) {
         super(scene, x, y, "base");
@@ -19,31 +17,42 @@ export default class Base extends Phaser.Physics.Arcade.Sprite {
         this.setTint(GAME_SETTINGS.base.color);
         this.setPosition(GAME_SETTINGS.base.position.x, GAME_SETTINGS.base.position.y);
 
-        // Create health bar
-        this.healthBar = new HealthBar(scene, this, this.maxHealth);
+        // Initialize health component with base settings
+        this.healthComponent = new HealthComponent(
+            this,
+            scene,
+            GAME_SETTINGS.base.initialHealth,
+            GAME_SETTINGS.base.initialHealth,
+            () => {
+                console.log("Base destroyed!");
+                this.destroy();
+                (this.scene as GameScene).gameOver();
+            }
+        );
     }
 
     takeDamage(damage: number) {
         if (!this.active) return;
-        this.health -= damage;
-        console.log(`Base took ${damage} damage. Health now: ${this.health}`);
-        this.healthBar.updateHealth(this.health);
-        if (this.health <= 0) {
-            console.log("Base health <= 0, destroying base and calling gameOver");
-            const gameScene = this.scene as GameScene;
-            this.healthBar.cleanup();
-            this.destroy();
-            console.log("Base destroyed!");
-            gameScene.gameOver();
-        }
+        console.log(`Base took ${damage} damage. Health now: ${this.healthComponent.getHealth() - damage}`);
+        this.healthComponent.takeDamage(damage);
     }
 
     getHealth(): number {
-        return this.health;
+        return this.healthComponent.getHealth();
     }
 
     heal(amount: number) {
-        this.health = Math.min(this.health + amount, this.maxHealth);
-        this.healthBar.updateHealth(this.health);
+        this.healthComponent.heal(amount);
+    }
+
+    // Override destroy to ensure cleanup
+    destroy(fromScene?: boolean) {
+        this.healthComponent.cleanup();
+        super.destroy(fromScene);
+    }
+
+    // Call in the scene's update method
+    update() {
+        this.healthComponent.update();
     }
 }

@@ -1,9 +1,9 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 import { GAME_SETTINGS, TowerType } from "../settings";
-import { HealthBar } from "../utils/health-bar";
 import TileMapManager from "../utils/tile-map-manager";
 import Enemy from "./enemy";
+import { HealthComponent } from "../utils/health-component";
 
 export default class Tower extends Phaser.Physics.Arcade.Sprite {
     towerType: TowerType;
@@ -11,9 +11,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     private lastShotTime: number = 0;
     // @ts-ignore
     private shootCooldown: number | null = null;
-    private healthBar: HealthBar;
-    private health: number;
-    private maxHealth: number;
+    private healthComponent: HealthComponent;
     private speedLevel: number = 0;
     private rangeLevel: number = 0;
     private damageLevel: number = 0;
@@ -45,8 +43,6 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         this.towerType = type;
         this.towerData = { ...GAME_SETTINGS.towers[type] };
         this.shootCooldown = this.towerData.shootCooldown;
-        this.maxHealth = this.towerData.health;
-        this.health = this.towerData.health;
 
         this.tileX = tileX;
         this.tileY = tileY;
@@ -62,7 +58,29 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         this.setInteractive();
         this.on("pointerdown", () => (this.scene as GameScene).selectTower(this));
 
-        this.healthBar = new HealthBar(scene, this, this.maxHealth);
+        // Initialize health component with tower health and death callback
+        this.healthComponent = new HealthComponent(
+            this,
+            scene,
+            this.towerData.health,
+            this.towerData.health,
+            () => {
+                const gameScene = this.scene as GameScene;
+                
+                // 1) Remove from group first using a public method
+                gameScene.removeTower(this);
+                
+                // 2) Destroy the tower
+                this.destroyTower();
+                console.log(`${this.towerType} destroyed!`);
+                
+                // 3) Force recalc
+                gameScene.recalculateEnemyTargets();
+                
+                // 4) (Optional) Force immediate re-update.
+                gameScene.forceEnemyUpdate();
+            }
+        );
 
         // Mark tiles as occupied
         tileMapManager.occupyTiles(tileX, tileY, this.tileWidth, this.tileHeight, 'tower', this.getId());
@@ -120,9 +138,8 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         this.updateTierAppearance();
         
         // Also increase health for higher tiers
-        this.maxHealth = this.towerData.health * this.getTierMultiplier();
-        this.health = this.maxHealth;
-        this.healthBar.updateHealth(this.health);
+        const newMaxHealth = this.towerData.health * this.getTierMultiplier();
+        this.healthComponent.setMaxHealth(newMaxHealth, true);
         
         return true;
     }
@@ -192,7 +209,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         return this.maxUpgradeLevel;
     }
     public getHealth(): number {
-        return this.health;
+        return this.healthComponent.getHealth();
     }
 
     // Add this getter!
@@ -202,7 +219,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
 
     // Add these new getters
     public getMaxHealth(): number {
-        return this.maxHealth;
+        return this.healthComponent.getMaxHealth();
     }
 
     public getShootCooldown(): number {
@@ -238,6 +255,10 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         if (!this.scene || !this.active) {
             return;
         }
+        
+        // Update health component
+        this.healthComponent.update();
+        
         const currentTime = this.scene.time.now;
         const gameScene = this.scene as GameScene;
 
@@ -294,32 +315,12 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
                 this.lastShotTime = currentTime;
             }
         }
-        this.healthBar.updateHealth(this.health);
     }
 
     takeDamage(damage: number) {
         if (!this.active) return; // Exit if the tower is already destroyed
-        this.health -= damage;
-        console.log(`${this.towerType} health: ${this.health}`);
-        this.healthBar.updateHealth(this.health);
-
-        if (this.health <= 0) {
-            const gameScene = this.scene as GameScene;
-
-            // 1) Remove from group first using a public method
-            gameScene.removeTower(this);
-
-            // 2) Destroy the tower
-            this.healthBar.cleanup();
-            this.destroyTower();
-            console.log(`${this.towerType} destroyed!`);
-
-            // 3) Force recalc
-            gameScene.recalculateEnemyTargets();
-
-            // 4) (Optional) Force immediate re-update.
-            gameScene.forceEnemyUpdate();
-        }
+        console.log(`${this.towerType} taking ${damage} damage`);
+        this.healthComponent.takeDamage(damage);
     }
 
     // Override destroy to free up tiles
@@ -327,6 +328,12 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         const tileMapManager = (this.scene as GameScene).getTileMapManager();
         tileMapManager.releaseTiles(this.tileX, this.tileY, this.tileWidth, this.tileHeight);
         this.destroy();
+    }
+
+    // Override destroy to ensure cleanup
+    destroy(fromScene?: boolean) {
+        this.healthComponent.cleanup();
+        super.destroy(fromScene);
     }
 
     // Get a unique ID for this tower

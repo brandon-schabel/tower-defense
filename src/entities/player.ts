@@ -1,9 +1,9 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import { HealthBar } from "../utils/health-bar";
 import { GAME_SETTINGS } from "../settings"; // Import
 import InventoryManager from "../utils/inventory-manager";
 import { DroppedItem, GameItem, ItemType, WeaponItem, ItemRarity } from "../types/item";
+import { HealthComponent } from "../utils/health-component"; // Import HealthComponent
 
 // Define Equipment item interface
 interface EquipmentItem {
@@ -22,13 +22,11 @@ interface EquipmentItem {
 }
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
-  private health: number = GAME_SETTINGS.player.initialHealth; // Use from settings
-  private maxHealth: number = GAME_SETTINGS.player.initialHealth; // Use from settings
+  private healthComponent: HealthComponent; // Replace health and healthBar
   private movementSpeed: number = GAME_SETTINGS.player.movementSpeed; // Use from settings
   // private shootRange: number = GAME_SETTINGS.player.shootRange; // Use from settings
   private lastShotTime: number = 0;
   private shootCooldown: number = GAME_SETTINGS.player.shootCooldown; // Use from settings
-  private healthBar: HealthBar;
   private keys: { 
     up: Phaser.Input.Keyboard.Key; 
     down: Phaser.Input.Keyboard.Key; 
@@ -59,7 +57,18 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
     this.setCollideWorldBounds(true);
 
-    this.healthBar = new HealthBar(scene, this, this.maxHealth);
+    // Initialize health component with initial health values
+    // We'll update the max health after all player stats are initialized
+    this.healthComponent = new HealthComponent(
+      this,
+      scene,
+      GAME_SETTINGS.player.initialHealth,
+      GAME_SETTINGS.player.initialHealth,
+      () => {
+        console.log("User died!");
+        (this.scene as GameScene).gameOver();
+      }
+    );
     
     // Initialize inventory
     this.inventory = new InventoryManager(20); // 20 slots
@@ -106,6 +115,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     scene.input.keyboard!.on('keydown-I', () => {
       this.toggleInventoryUI();
     });
+    
+    // Make sure max health is properly set after all initialization
+    this.getMaxHealth();
   }
 
   update() {
@@ -130,7 +142,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.handleShooting();
     this.handleItemPickup();
     this.handleItemUse();
-    this.healthBar.updateHealth(this.health);
+    
+    // Update health component
+    this.healthComponent.update();
     
     // Update floating text positions
     if (this.pickupText) {
@@ -139,26 +153,16 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   heal(amount: number) {
-    this.health = Math.min(this.health + amount, this.maxHealth);
-    this.healthBar.updateHealth(this.health);
+    this.healthComponent.heal(amount);
   }
 
   getHealth(): number {
-    return this.health;
+    return this.healthComponent.getHealth();
   }
 
   takeDamage(damage: number) {
     if (!this.active) return; // Exit if the user is already destroyed
-    this.health -= damage;
-    this.healthBar.updateHealth(this.health);
-    if (this.health <= 0) {
-      this.health = 0;
-      const gameScene = this.scene as GameScene;
-      this.healthBar.cleanup();
-      this.destroy();
-      console.log("User died!");
-      gameScene.gameOver();
-    }
+    this.healthComponent.takeDamage(damage);
   }
 
   private handleShooting() {
@@ -252,7 +256,15 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       }
     });
 
-    return baseMaxHealth + equipmentBonus;
+    const totalMaxHealth = baseMaxHealth + equipmentBonus;
+    
+    // Ensure the health component's max health is in sync
+    // Only update if it's different to avoid unnecessary updates
+    if (this.healthComponent.getMaxHealth() !== totalMaxHealth) {
+      this.healthComponent.setMaxHealth(totalMaxHealth, true);
+    }
+    
+    return totalMaxHealth;
   }
 
   public upgradeAttribute(attribute: 'speed' | 'damage' | 'range' | 'health', cost: number): boolean {
@@ -274,9 +286,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         break;
       case 'health':
         this.maxHealthLevel++;
-        // Heal the player proportionally when max health increases
-        const healthRatio = this.health / this.getMaxHealth();
-        this.health = healthRatio * this.getMaxHealth();
+        // The getMaxHealth method will update the health component
+        this.getMaxHealth();
         break;
     }
 
@@ -308,6 +319,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Update the player's appearance based on equipped items
     this.updateAppearance();
+    
+    // Update max health if the item affects health
+    if (item.stats.healthBonus) {
+      this.getMaxHealth(); // This will update the health component
+    }
 
     return true;
   }
@@ -528,6 +544,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       this.invKeyText.destroy();
     }
     
+    this.healthComponent.cleanup();
     super.destroy(fromScene);
   }
 
@@ -539,7 +556,17 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     // Schedule removal
     this.scene.time.delayedCall(duration, () => {
       this.activeBuffs.delete(buffType);
+      
+      // If this was a health buff, update max health when it expires
+      if (buffType === 'health' || buffType === 'maxHealth') {
+        this.getMaxHealth();
+      }
     });
+    
+    // If this is a health buff, update max health immediately
+    if (buffType === 'health' || buffType === 'maxHealth') {
+      this.getMaxHealth();
+    }
     
     // Visual feedback
     const buffText = this.scene.add.text(
