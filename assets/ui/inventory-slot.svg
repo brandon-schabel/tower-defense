@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <defs>
+        <linearGradient id="metalBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#aaa;stop-opacity:1" />
+            <stop offset="25%" style="stop-color:#ccc;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#999;stop-opacity:1" />
+            <stop offset="75%" style="stop-color:#888;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#666;stop-opacity:1" />
+        </linearGradient>
+        
+        <linearGradient id="slotBg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#334;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#112;stop-opacity:1" />
+        </linearGradient>
+        
+        <filter id="innerShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+            <feOffset dy="2" dx="2"/>
+            <feComposite in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="shadowDiff"/>
+            <feFlood flood-color="#000" flood-opacity="0.6" result="color"/>
+            <feComposite in="color" in2="shadowDiff" operator="in" result="shadow"/>
+            <feComposite in="shadow" in2="SourceGraphic" operator="over"/>
+        </filter>
+    </defs>
+    
+    <!-- Main Slot Border -->
+    <rect x="2" y="2" width="60" height="60" rx="2" ry="2"
+          fill="url(#metalBorder)" stroke="#444" stroke-width="2" />
+          
+    <!-- Inner Slot Area -->
+    <rect x="6" y="6" width="52" height="52" rx="1" ry="1"
+          fill="url(#slotBg)" filter="url(#innerShadow)" />
+          
+    <!-- Corner Rivets -->
+    <circle cx="8" cy="8" r="2" fill="#999" stroke="#666" stroke-width="0.5" />
+    <circle cx="56" cy="8" r="2" fill="#999" stroke="#666" stroke-width="0.5" />
+    <circle cx="8" cy="56" r="2" fill="#999" stroke="#666" stroke-width="0.5" />
+    <circle cx="56" cy="56" r="2" fill="#999" stroke="#666" stroke-width="0.5" />
+    
+    <!-- Highlight Edges -->
+    <path d="M6 32 L58 32" stroke="#445" stroke-width="1" stroke-dasharray="2 2" />
+    <path d="M32 6 L32 58" stroke="#445" stroke-width="1" stroke-dasharray="2 2" />
+    
+    <!-- Warning Detail -->
+    <path d="M10 56 L18 56 L14 52 Z" fill="#cc0" stroke="#000" stroke-width="0.5" />
+</svg> 

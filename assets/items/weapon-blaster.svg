@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+    <defs>
+        <linearGradient id="metalGun" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#888;stop-opacity:1" />
+            <stop offset="40%" style="stop-color:#aaa;stop-opacity:1" />
+            <stop offset="60%" style="stop-color:#999;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#666;stop-opacity:1" />
+        </linearGradient>
+        
+        <linearGradient id="handle" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#432;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#321;stop-opacity:1" />
+        </linearGradient>
+        
+        <linearGradient id="alliedAccent" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#39c;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#17a;stop-opacity:1" />
+        </linearGradient>
+        
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="1" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.5"/>
+        </filter>
+    </defs>
+    
+    <!-- Gun Handle -->
+    <rect x="18" y="14" width="4" height="10" rx="1" ry="1" 
+          fill="url(#handle)" stroke="#000" stroke-width="0.5" />
+    
+    <!-- Trigger Guard -->
+    <path d="M18,16 C16,16 16,19 16,20 L18,20" 
+          fill="none" stroke="#555" stroke-width="0.8" />
+          
+    <!-- Main Gun Body -->
+    <rect x="6" y="12" width="14" height="4" rx="1" ry="1" 
+          fill="url(#metalGun)" stroke="#000" stroke-width="0.7" filter="url(#shadow)" />
+    
+    <!-- Barrel -->
+    <rect x="3" y="13" width="5" height="2" rx="0.5" ry="0.5" 
+          fill="#555" stroke="#000" stroke-width="0.5" />
+    <circle cx="3" cy="14" r="1" fill="#222" />
+    
+    <!-- Energy Chamber -->
+    <rect x="10" y="10" width="6" height="2" 
+          fill="url(#alliedAccent)" stroke="#000" stroke-width="0.5" />
+    <rect x="12" y="8" width="2" height="2" 
+          fill="url(#alliedAccent)" stroke="#000" stroke-width="0.5" />
+          
+    <!-- Tech Details -->
+    <rect x="8" y="13" width="1" height="2" fill="#222" />
+    <rect x="16" y="13" width="1" height="2" fill="#222" />
+    <path d="M17 11 L19 11" stroke="#28c" stroke-width="0.5" />
+    
+    <!-- Warning Markings -->
+    <rect x="10.5" y="13.5" width="5" height="1" fill="#222" />
+    <path d="M11 13.5 L12 13.5 L12 14.5 L11 14.5 Z" fill="#ff0" />
+    <path d="M14 13.5 L15 13.5 L15 14.5 L14 14.5 Z" fill="#ff0" />
+</svg> 

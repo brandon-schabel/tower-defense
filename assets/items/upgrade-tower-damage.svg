@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+    <defs>
+        <linearGradient id="metalPlate" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#aaa;stop-opacity:1" />
+            <stop offset="40%" style="stop-color:#ccc;stop-opacity:1" />
+            <stop offset="60%" style="stop-color:#bbb;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#999;stop-opacity:1" />
+        </linearGradient>
+        
+        <radialGradient id="damageGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#f44;stop-opacity:1" />
+            <stop offset="60%" style="stop-color:#c00;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#900;stop-opacity:1" />
+        </radialGradient>
+        
+        <radialGradient id="blueGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#28c;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#17a;stop-opacity:1" />
+        </radialGradient>
+        
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="1" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.6"/>
+        </filter>
+    </defs>
+    
+    <!-- Base Plate -->
+    <rect x="4" y="4" width="24" height="24" rx="2" ry="2" 
+          fill="url(#metalPlate)" stroke="#444" stroke-width="1" filter="url(#shadow)" />
+    
+    <!-- Corner Rivets -->
+    <circle cx="7" cy="7" r="1.2" fill="#777" stroke="#444" stroke-width="0.5" />
+    <circle cx="25" cy="7" r="1.2" fill="#777" stroke="#444" stroke-width="0.5" />
+    <circle cx="7" cy="25" r="1.2" fill="#777" stroke="#444" stroke-width="0.5" />
+    <circle cx="25" cy="25" r="1.2" fill="#777" stroke="#444" stroke-width="0.5" />
+    
+    <!-- Upgrade Symbol (Target/Crosshairs) -->
+    <circle cx="16" cy="16" r="7" fill="none" stroke="url(#damageGlow)" stroke-width="1.5" />
+    <circle cx="16" cy="16" r="2" fill="url(#damageGlow)" />
+    <path d="M16,9 L16,11 M16,21 L16,23 M9,16 L11,16 M21,16 L23,16" 
+          stroke="url(#damageGlow)" stroke-width="1.5" />
+    
+    <!-- Up Arrow -->
+    <path d="M14,12 L16,10 L18,12 M16,10 L16,18" 
+          stroke="#fff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+    
+    <!-- Tech Frame -->
+    <rect x="10" y="20" width="12" height="3" rx="1" ry="1" 
+          fill="url(#blueGlow)" stroke="#444" stroke-width="0.5" />
+    <text x="16" y="22.5" font-family="Arial, sans-serif" font-weight="bold" font-size="2.5"
+          text-anchor="middle" fill="#fff">DAMAGE+</text>
+</svg> 

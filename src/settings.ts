@@ -2,6 +2,13 @@ export const GAME_SETTINGS = {
     game: {
         enemyTargetRecalculationInterval: 1000, // ms, how often enemies recalculate targets
     },
+    map: {
+        tileSize: 32, // Size of each tile in pixels
+        width: 40,    // Map width in tiles (40 tiles * 32px = 1280px)
+        height: 30,   // Map height in tiles (30 tiles * 32px = 960px)
+        terrainTexture: 'terrain-tiles',
+        decorationCount: 30, // Number of decorative elements to place
+    },
     towers: {
         'normal-tower': {
             name: 'Normal Tower',
@@ -13,6 +20,7 @@ export const GAME_SETTINGS = {
             shootCooldown: 500, // ms
             scale: 0.5,
             projectileType: 'normal',
+            size: { width: 1, height: 1 }, // Size in tiles
         },
         'sniper-tower': {
             name: 'Sniper Tower',
@@ -24,6 +32,7 @@ export const GAME_SETTINGS = {
             shootCooldown: 1000, // ms
             scale: 0.5,
             projectileType: 'sniper',
+            size: { width: 1, height: 1 }, // Size in tiles
         },
         'area-tower': {
             name: 'Area Tower',
@@ -35,6 +44,7 @@ export const GAME_SETTINGS = {
             shootCooldown: 2000, // ms
             scale: 0.5,
             projectileType: 'area',
+            size: { width: 1, height: 1 }, // Size in tiles
         },
     },
     enemies: {
@@ -74,16 +84,16 @@ export const GAME_SETTINGS = {
         speed: 300, // Pixels per second
         hitDistance: 5, // Distance to hit target
         normal: {
-          speed: 300,
-          damage: 10,
+            speed: 300,
+            damage: 10,
         },
         sniper: {
-          speed: 600,
-          damage: 25,
+            speed: 600,
+            damage: 25,
         },
         area: {
-          speed: 200,
-          damage: 15,
+            speed: 200,
+            damage: 15,
         },
         player: {
             speed: 400,
@@ -95,3 +105,30 @@ export const GAME_SETTINGS = {
 export const TOWER_TYPES = Object.keys(GAME_SETTINGS.towers);
 export type TowerType = keyof typeof GAME_SETTINGS.towers;
 
+export enum DifficultyLevel {
+    Easy = 'easy',
+    Medium = 'medium',
+    Hard = 'hard'
+}
+
+// Add difficulty multipliers to settings
+export const DIFFICULTY_SETTINGS = {
+    [DifficultyLevel.Easy]: {
+        enemyHealthMultiplier: 0.8,
+        enemySpeedMultiplier: 0.8,
+        enemyCountMultiplier: 0.7,
+        resourceMultiplier: 1.2
+    },
+    [DifficultyLevel.Medium]: {
+        enemyHealthMultiplier: 1.0,
+        enemySpeedMultiplier: 1.0,
+        enemyCountMultiplier: 1.0,
+        resourceMultiplier: 1.0
+    },
+    [DifficultyLevel.Hard]: {
+        enemyHealthMultiplier: 1.3,
+        enemySpeedMultiplier: 1.2,
+        enemyCountMultiplier: 1.5,
+        resourceMultiplier: 0.8
+    }
+};

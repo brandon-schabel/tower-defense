@@ -1,54 +1,85 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-    <!-- Basic Tower (64x64) -->
     <defs>
-        <!-- Gradients -->
-        <linearGradient id="baseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#aa66aa;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#939;stop-opacity:1" />
+        <!-- Allied Tech Gradients -->
+        <linearGradient id="alliedBase" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#456;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#234;stop-opacity:1" />
         </linearGradient>
-        <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#cc88cc;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#b4b;stop-opacity:1" />
+        
+        <linearGradient id="prismHousing" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#678;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#345;stop-opacity:1" />
         </linearGradient>
-        <radialGradient id="turretGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-            <stop offset="0%" style="stop-color:#dd99dd;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#c5c;stop-opacity:1" />
+        
+        <radialGradient id="energyCore" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#fff;stop-opacity:1" />
+            <stop offset="20%" style="stop-color:#acf;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#28c;stop-opacity:1" />
         </radialGradient>
-        <linearGradient id="scopeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#88aaff;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#626;stop-opacity:1" />
-        </linearGradient>
+        
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        
+        <filter id="shadow" x="-0.2" y="-0.2" width="1.4" height="1.4">
+            <feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.6"/>
+        </filter>
 
-      <filter id="shadow" x="-0.2" y="-0.2" width="1.4" height="1.4">
-        <feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.5"/>
-      </filter>
-
-        <!-- Sniper Tower (64x64) -->
-        <g id="sniper-tower">
-            <!-- Base -->
-            <path d="M24 44h16v12H24z" fill="url(#baseGradient)" stroke="#000" stroke-width="2" />
-            <!-- Tower Body -->
-            <path d="M26 14h12v30H26z" fill="url(#bodyGradient)" stroke="#000" stroke-width="2" />
-            <!-- Turret -->
-            <circle cx="32" cy="12" r="6" fill="url(#turretGradient)" stroke="#000" stroke-width="2" />
-            <!-- Long Barrel -->
-            <rect x="31" y="4" width="2" height="10" fill="#000" />
-            <rect x="30" y="3" width="4" height="2" fill="#222" />
-            <!-- Scope -->
-            <rect x="29" y="8" width="6" height="3" fill="url(#scopeGradient)" stroke="#000" stroke-width="1" />
-            <!-- Details -->
-            <rect x="28" y="24" width="8" height="2" fill="#939" />
-            <rect x="28" y="32" width="8" height="2" fill="#939" />
-            <!-- Highlights -->
-            <rect x="29" y="25" width="6" height="1" fill="#b4b" />
-            <rect x="29" y="33" width="6" height="1" fill="#b4b" />
-          <g style="filter:url(#shadow);">
-            <use href="#sniper-tower"/>
-          </g>
+        <g id="prism-tower">
+            <!-- Concrete Base -->
+            <path d="M22 44 L22 56 L42 56 L42 44 Z" fill="#888" stroke="#000" stroke-width="2" />
+            
+            <!-- Base Details -->
+            <path d="M24 50 L40 50" stroke="#666" stroke-width="1.5" />
+            <path d="M24 54 L40 54" stroke="#666" stroke-width="1.5" />
+            <path d="M26 44 L26 56 M38 44 L38 56" stroke="#666" stroke-width="1" />
+            
+            <!-- Main Tower Structure -->
+            <path d="M24 20 L24 44 L40 44 L40 20 Z" fill="url(#alliedBase)" stroke="#000" stroke-width="2" />
+            
+            <!-- Allied Tech Bands -->
+            <rect x="24" y="24" width="16" height="3" fill="#28c" stroke="#000" stroke-width="0.5" />
+            <rect x="24" y="40" width="16" height="3" fill="#28c" stroke="#000" stroke-width="0.5" />
+            <rect x="24" y="32" width="16" height="3" fill="#28c" stroke="#000" stroke-width="0.5" />
+            
+            <!-- Prism Housing -->
+            <polygon points="24,20 40,20 36,12 28,12" fill="url(#prismHousing)" stroke="#000" stroke-width="1.5" />
+            
+            <!-- Prism Emitter -->
+            <polygon points="32,5 28,12 36,12" fill="#39d" stroke="#000" stroke-width="1" />
+            
+            <!-- Energy Core -->
+            <circle cx="32" cy="12" r="4" fill="url(#energyCore)" filter="url(#glow)" />
+            
+            <!-- Energy Beam Effect -->
+            <path d="M32 5 L32 1" stroke="#acf" stroke-width="3" opacity="0.7" />
+            
+            <!-- Energy Rings -->
+            <circle cx="32" cy="12" r="7" fill="none" stroke="#5af" stroke-width="0.5" stroke-dasharray="1 1" />
+            <circle cx="32" cy="12" r="9" fill="none" stroke="#39d" stroke-width="0.5" stroke-dasharray="2 2" />
+            
+            <!-- Tech Details -->
+            <path d="M26 28 L38 28" stroke="#1af" stroke-width="0.5" />
+            <path d="M26 36 L38 36" stroke="#1af" stroke-width="0.5" />
+            
+            <!-- Warning Lights -->
+            <circle cx="30" cy="16" r="1" fill="#f00" />
+            <circle cx="34" cy="16" r="1" fill="#f00" />
+            
+            <!-- Cooling Vents -->
+            <rect x="26" y="20" width="2" height="8" fill="#222" stroke="#000" stroke-width="0.5" />
+            <rect x="36" y="20" width="2" height="8" fill="#222" stroke="#000" stroke-width="0.5" />
+            
+            <!-- Rivets -->
+            <circle cx="26" cy="22" r="0.8" fill="#aaa" />
+            <circle cx="38" cy="22" r="0.8" fill="#aaa" />
+            <circle cx="26" cy="42" r="0.8" fill="#aaa" />
+            <circle cx="38" cy="42" r="0.8" fill="#aaa" />
         </g>
     </defs>
 
-    <!-- Place one of each tower type for preview -->
-    <use href="#sniper-tower" x="0" y="0" />
+    <!-- Place the prism tower for preview -->
+    <use href="#prism-tower" filter="url(#shadow)" />
 </svg>

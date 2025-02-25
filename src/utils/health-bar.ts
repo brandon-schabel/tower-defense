@@ -28,17 +28,25 @@ export class HealthBar {
 
   private updateHealthBar() {
     this.healthBar.clear();
+    
+    // Get current position of the entity
+    const x = this.entity.x;
+    const y = this.entity.y;
+    
+    // Background (red)
     this.healthBar.fillStyle(0xff0000);
     this.healthBar.fillRect(
-      this.entity.x - this.width / 2,
-      this.entity.y + this.offsetY,
+      x - this.width / 2,
+      y + this.offsetY,
       this.width,
       this.height
     );
+    
+    // Foreground (green) - based on current health percentage
     this.healthBar.fillStyle(0x00ff00);
     this.healthBar.fillRect(
-      this.entity.x - this.width / 2,
-      this.entity.y + this.offsetY,
+      x - this.width / 2,
+      y + this.offsetY,
       (this.health / this.maxHealth) * this.width,
       this.height
     );

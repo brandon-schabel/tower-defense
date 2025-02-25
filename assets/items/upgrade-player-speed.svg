@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+    <defs>
+        <linearGradient id="metalPlate" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#aaa;stop-opacity:1" />
+            <stop offset="40%" style="stop-color:#ccc;stop-opacity:1" />
+            <stop offset="60%" style="stop-color:#bbb;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#999;stop-opacity:1" />
+        </linearGradient>
+        
+        <linearGradient id="speedGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#6cf;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#28c;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#17a;stop-opacity:1" />
+        </linearGradient>
+        
+        <radialGradient id="blueGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#28c;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#17a;stop-opacity:1" />
+        </radialGradient>
+        
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="1" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.6"/>
+        </filter>
+    </defs>
+    
+    <!-- Base Plate -->
+    <rect x="4" y="4" width="24" height="24" rx="2" ry="2" 
+          fill="url(#metalPlate)" stroke="#444" stroke-width="1" filter="url(#shadow)" />
+    
+    <!-- Corner Rivets -->
+    <circle cx="7" cy="7" r="1.2" fill="#777" stroke="#444" stroke-width="0.5" />
+    <circle cx="25" cy="7" r="1.2" fill="#777" stroke="#444" stroke-width="0.5" />
+    <circle cx="7" cy="25" r="1.2" fill="#777" stroke="#444" stroke-width="0.5" />
+    <circle cx="25" cy="25" r="1.2" fill="#777" stroke="#444" stroke-width="0.5" />
+    
+    <!-- Speed Lines -->
+    <path d="M12,16 L24,16" stroke="url(#speedGlow)" stroke-width="2" stroke-linecap="round" />
+    <path d="M10,12 L22,12" stroke="url(#speedGlow)" stroke-width="1.5" stroke-linecap="round" />
+    <path d="M10,20 L22,20" stroke="url(#speedGlow)" stroke-width="1.5" stroke-linecap="round" />
+    
+    <!-- Speed Arrow -->
+    <path d="M12,16 L8,13 L8,19 Z" fill="url(#speedGlow)" />
+    
+    <!-- Motion Trail -->
+    <path d="M18,12 C16,12 15,16 15,16 C15,16 14,20 12,20" 
+          stroke="#fff" stroke-width="0.8" stroke-linecap="round" stroke-dasharray="1,1" />
+    <path d="M22,12 C20,12 19,16 19,16 C19,16 18,20 16,20" 
+          stroke="#fff" stroke-width="0.8" stroke-linecap="round" stroke-dasharray="1,1" />
+    
+    <!-- Tech Frame -->
+    <rect x="10" y="24" width="12" height="3" rx="1" ry="1" 
+          fill="url(#blueGlow)" stroke="#444" stroke-width="0.5" />
+    <text x="16" y="26.5" font-family="Arial, sans-serif" font-weight="bold" font-size="2.5"
+          text-anchor="middle" fill="#fff">SPEED+</text>
+</svg> 

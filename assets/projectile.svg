@@ -1,40 +1,57 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-16 -16 32 32">
     <defs>
-        <!-- Projectile Glow Filter -->
+        <!-- Energy Effects -->
+        <radialGradient id="energyCore" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#fff;stop-opacity:1" />
+            <stop offset="30%" style="stop-color:#acf;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#28c;stop-opacity:0.8" />
+        </radialGradient>
+        
+        <linearGradient id="tracerTail" x1="100%" y1="0%" x2="0%" y2="0%">
+            <stop offset="0%" style="stop-color:#28c;stop-opacity:0" />
+            <stop offset="40%" style="stop-color:#39d;stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:#5af;stop-opacity:0.8" />
+        </linearGradient>
+        
+        <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        
         <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="2" result="blur" />
-            <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-            </feMerge>
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
         </filter>
 
         <g id="projectile">
-            <!-- Energy Core -->
-            <circle cx="0" cy="0" r="4" 
-                    fill="#fff" 
-                    filter="url(#glow)" />
+            <!-- Motion/Tracer Trail -->
+            <path d="M-12,0 L-3,0" stroke="url(#tracerTail)" stroke-width="5" 
+                  filter="url(#blur)" stroke-linecap="round" />
+                  
+            <!-- Secondary Motion Trails -->
+            <path d="M-10,-2 L-2,-1" stroke="#39d" stroke-width="1.5" 
+                  opacity="0.4" filter="url(#blur)" />
+            <path d="M-10,2 L-2,1" stroke="#39d" stroke-width="1.5" 
+                  opacity="0.4" filter="url(#blur)" />
+                  
+            <!-- Main Projectile -->
+            <circle cx="0" cy="0" r="3" fill="url(#energyCore)" 
+                    stroke="#fff" stroke-width="1" filter="url(#glow)" />
+                    
+            <!-- Directional Tip -->
+            <path d="M0,-3 L4,0 L0,3" fill="#5af" stroke="#fff" stroke-width="0.5" />
             
-            <!-- Energy Trails -->
-            <path d="M-6,-6 L6,6 M6,-6 L-6,6" 
-                  stroke="#7cf" 
-                  stroke-width="2" 
-                  stroke-linecap="round" 
-                  opacity="0.6" />
+            <!-- Energy Rings -->
+            <circle cx="0" cy="0" r="5" fill="none" stroke="#acf" 
+                    stroke-width="0.5" opacity="0.6" />
+                    
+            <!-- Impact Point -->
+            <circle cx="2" cy="0" r="1" fill="#fff" opacity="0.8" />
             
-            <!-- Center Detail -->
-            <circle cx="0" cy="0" r="2" 
-                    fill="#7cf" 
-                    stroke="#fff" 
-                    stroke-width="1" />
-            
-            <!-- Outer Ring -->
-            <circle cx="0" cy="0" r="6" 
-                    fill="none" 
-                    stroke="#7cf" 
-                    stroke-width="1" 
-                    opacity="0.5" />
+            <!-- Muzzle Flash Effect (when shot) -->
+            <path d="M-5,-4 L-2,-1 M-5,0 L-1,0 M-5,4 L-2,1" 
+                  stroke="#fff" stroke-width="0.8" opacity="0.5" />
         </g>
     </defs>
     

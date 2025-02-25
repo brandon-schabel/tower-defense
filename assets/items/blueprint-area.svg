@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <defs>
+        <linearGradient id="blueprintBg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#2a4b8d;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#1a3366;stop-opacity:1" />
+        </linearGradient>
+        
+        <filter id="paperTexture" x="-10%" y="-10%" width="120%" height="120%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="5" result="noise" />
+            <feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0.3 0" in="noise" result="noisealpha" />
+            <feComposite operator="in" in="SourceGraphic" in2="noisealpha" />
+        </filter>
+        
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="2" dy="2" stdDeviation="1" flood-color="#000" flood-opacity="0.5"/>
+        </filter>
+    </defs>
+    
+    <!-- Blueprint Paper -->
+    <rect x="4" y="4" width="56" height="56" rx="2" ry="2" 
+          fill="url(#blueprintBg)" filter="url(#paperTexture)" />
+    
+    <!-- Border -->
+    <rect x="6" y="6" width="52" height="52" rx="1" ry="1" 
+          fill="none" stroke="#fff" stroke-width="0.5" stroke-opacity="0.7" />
+          
+    <!-- Title -->
+    <text x="32" y="12" font-family="Arial, sans-serif" font-weight="bold" font-size="3.5"
+          text-anchor="middle" fill="#fff" letter-spacing="0.5">AREA DEFENSE TOWER</text>
+    <line x1="12" y1="14" x2="52" y2="14" stroke="#fff" stroke-width="0.5" stroke-opacity="0.7" />
+    
+    <!-- Grid -->
+    <g stroke="#fff" stroke-width="0.2" stroke-opacity="0.3">
+        <line x1="10" y1="16" x2="10" y2="54" />
+        <line x1="15" y1="16" x2="15" y2="54" />
+        <line x1="20" y1="16" x2="20" y2="54" />
+        <line x1="25" y1="16" x2="25" y2="54" />
+        <line x1="30" y1="16" x2="30" y2="54" />
+        <line x1="35" y1="16" x2="35" y2="54" />
+        <line x1="40" y1="16" x2="40" y2="54" />
+        <line x1="45" y1="16" x2="45" y2="54" />
+        <line x1="50" y1="16" x2="50" y2="54" />
+        <line x1="55" y1="16" x2="55" y2="54" />
+        
+        <line x1="10" y1="16" x2="55" y2="16" />
+        <line x1="10" y1="21" x2="55" y2="21" />
+        <line x1="10" y1="26" x2="55" y2="26" />
+        <line x1="10" y1="31" x2="55" y2="31" />
+        <line x1="10" y1="36" x2="55" y2="36" />
+        <line x1="10" y1="41" x2="55" y2="41" />
+        <line x1="10" y1="46" x2="55" y2="46" />
+        <line x1="10" y1="51" x2="55" y2="51" />
+    </g>
+    
+    <!-- Tower Base -->
+    <rect x="23" y="41" width="18" height="10" 
+          fill="none" stroke="#fff" stroke-width="0.8" />
+    
+    <!-- Tower Structure -->
+    <rect x="27" y="24" width="10" height="17" 
+          fill="none" stroke="#fff" stroke-width="0.8" />
+    
+    <!-- Area Weapon Platform -->
+    <circle cx="32" cy="20" r="8" fill="none" stroke="#fff" stroke-width="0.8" />
+    <circle cx="32" cy="20" r="5" fill="none" stroke="#fff" stroke-width="0.8" stroke-dasharray="1,1" />
+    <circle cx="32" cy="20" r="2" fill="#fff" />
+    
+    <!-- Energy Coils -->
+    <path d="M28,18 C26,16 26,14 28,12" fill="none" stroke="#fff" stroke-width="0.6" />
+    <path d="M36,18 C38,16 38,14 36,12" fill="none" stroke="#fff" stroke-width="0.6" />
+    <path d="M30,16 C29,15 29,14 30,13" fill="none" stroke="#fff" stroke-width="0.6" />
+    <path d="M34,16 C35,15 35,14 34,13" fill="none" stroke="#fff" stroke-width="0.6" />
+    
+    <!-- Area Effect Radius -->
+    <circle cx="32" cy="20" r="14" fill="none" stroke="#fff" stroke-width="0.5" stroke-dasharray="0.7,0.7" />
+    
+    <!-- Dimensions -->
+    <path d="M20,51 L20,41 L23,41" fill="none" stroke="#fff" stroke-width="0.3" stroke-dasharray="0.5,0.5" />
+    <text x="19" y="46" font-family="Arial, sans-serif" font-size="2"
+          text-anchor="end" fill="#fff">10m</text>
+          
+    <path d="M41,54 L41,51 L23,51" fill="none" stroke="#fff" stroke-width="0.3" stroke-dasharray="0.5,0.5" />
+    <text x="32" y="55" font-family="Arial, sans-serif" font-size="2"
+          text-anchor="middle" fill="#fff">18m</text>
+          
+    <path d="M40,37 L40,24 L37,24" fill="none" stroke="#fff" stroke-width="0.3" stroke-dasharray="0.5,0.5" />
+    <text x="41" y="31" font-family="Arial, sans-serif" font-size="2"
+          text-anchor="start" fill="#fff">17m</text>
+          
+    <path d="M46,20 L40,20" fill="none" stroke="#fff" stroke-width="0.3" stroke-dasharray="0.5,0.5" />
+    <text x="47" y="21" font-family="Arial, sans-serif" font-size="2"
+          text-anchor="start" fill="#fff">⌀16m</text>
+          
+    <path d="M17,20 L24,20" fill="none" stroke="#fff" stroke-width="0.3" stroke-dasharray="0.5,0.5" />
+    <text x="16" y="21" font-family="Arial, sans-serif" font-size="2"
+          text-anchor="end" fill="#fff">R:14m</text>
+    
+    <!-- Allied Symbol -->
+    <polygon points="12,54 16,50 20,54 16,58" fill="none" stroke="#fff" stroke-width="0.8" />
+    <circle cx="16" cy="54" r="1.5" fill="#fff" />
+    
+    <!-- Notes -->
+    <text x="50" y="27" font-family="Arial, sans-serif" font-size="2"
+          text-anchor="end" fill="#fff">TESLA EMITTER</text>
+          
+    <text x="50" y="39" font-family="Arial, sans-serif" font-size="2"
+          text-anchor="end" fill="#fff">REINFORCED STRUCTURE</text>
+          
+    <text x="50" y="49" font-family="Arial, sans-serif" font-size="2"
+          text-anchor="end" fill="#fff">POWER GENERATOR</text>
+          
+    <!-- Tech Specs -->
+    <rect x="10" y="22" width="12" height="12" rx="1" ry="1"
+          fill="none" stroke="#fff" stroke-width="0.5" stroke-opacity="0.7" />
+          
+    <text x="16" y="25" font-family="Arial, sans-serif" font-size="2"
+          text-anchor="middle" fill="#fff">TECH SPECS</text>
+          
+    <text x="11" y="28" font-family="Arial, sans-serif" font-size="1.8"
+          fill="#fff">RANGE: 40</text>
+          
+    <text x="11" y="30" font-family="Arial, sans-serif" font-size="1.8"
+          fill="#fff">DMG: 65</text>
+          
+    <text x="11" y="32" font-family="Arial, sans-serif" font-size="1.8"
+          fill="#fff">RATE: 1.2/s</text>
+</svg> 
