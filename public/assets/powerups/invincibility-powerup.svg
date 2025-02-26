@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-32 -32 64 64">
+    <defs>
+        <!-- Gold Background Gradient -->
+        <radialGradient id="invincibilityGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" style="stop-color:#ffdd33;stop-opacity:1" />
+            <stop offset="70%" style="stop-color:#ffbb00;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#dd9900;stop-opacity:1" />
+        </radialGradient>
+        
+        <!-- Shield Gradient -->
+        <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.8" />
+            <stop offset="100%" style="stop-color:#dddddd;stop-opacity:0.3" />
+        </linearGradient>
+        
+        <!-- Power-up Glow -->
+        <filter id="powerupGlow" x="-0.2" y="-0.2" width="1.4" height="1.4">
+            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feFlood flood-color="#ffdd33" flood-opacity="0.7" result="glow" />
+            <feComposite in="glow" in2="blur" operator="in" result="softGlow" />
+            <feComposite in="SourceGraphic" in2="softGlow" operator="over" />
+        </filter>
+        
+        <!-- Highlight Gleam -->
+        <linearGradient id="highlightGleam" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#fff;stop-opacity:0.9" />
+            <stop offset="100%" style="stop-color:#fff;stop-opacity:0" />
+        </linearGradient>
+        
+        <!-- Shield Animation -->
+        <animateTransform 
+            id="shieldPulse"
+            attributeName="transform"
+            attributeType="XML"
+            type="scale"
+            values="1;1.05;1"
+            dur="2s"
+            repeatCount="indefinite"/>
+    </defs>
+    
+    <!-- Invincibility Power-up -->
+    <g id="invincibilityPowerup" filter="url(#powerupGlow)">
+        <!-- Base circle -->
+        <circle cx="0" cy="0" r="16" fill="url(#invincibilityGradient)" stroke="#dd9900" stroke-width="2" />
+        
+        <!-- Shield Symbol -->
+        <path d="M0,-10 C-6,-9 -9,-5 -10,0 C-9,6 -5,10 0,12 C5,10 9,6 10,0 C9,-5 6,-9 0,-10 Z" 
+              fill="url(#shieldGradient)" stroke="#fff" stroke-width="1">
+            <animateTransform 
+                attributeName="transform"
+                attributeType="XML"
+                type="scale"
+                values="1;1.05;1"
+                dur="2s"
+                repeatCount="indefinite"/>
+        </path>
+        
+        <!-- Star Emblem -->
+        <path d="M0,-5 L1,-2 L4,-1.5 L2,0.5 L3,3.5 L0,2 L-3,3.5 L-2,0.5 L-4,-1.5 L-1,-2 Z" 
+              fill="#ffee88" stroke="#fff" stroke-width="0.5" />
+        
+        <!-- Protective Rays -->
+        <path d="M-14,-14 L-10,-10 M14,-14 L10,-10 M-14,14 L-10,10 M14,14 L10,10" 
+              stroke="#fff" stroke-width="1" stroke-dasharray="1 1" />
+        <path d="M-16,0 L-12,0 M0,-16 L0,-12 M16,0 L12,0 M0,16 L0,12" 
+              stroke="#fff" stroke-width="1" stroke-dasharray="1 1" />
+        
+        <!-- Energy Field -->
+        <circle cx="0" cy="0" r="12" fill="none" stroke="#fff" stroke-width="0.5" stroke-dasharray="0.5 1.5" stroke-opacity="0.7">
+            <animateTransform 
+                attributeName="transform"
+                attributeType="XML"
+                type="rotate"
+                from="0 0 0"
+                to="360 0 0"
+                dur="10s"
+                repeatCount="indefinite"/>
+        </circle>
+        
+        <!-- Highlight gleam -->
+        <path d="M-6,-6 L-1,-1" stroke="url(#highlightGleam)" stroke-width="3" stroke-linecap="round" />
+        
+        <!-- Orbital rings -->
+        <circle cx="0" cy="0" r="20" fill="none" stroke="#ffdd33" stroke-width="0.5" stroke-dasharray="3 2" stroke-opacity="0.7">
+            <animateTransform 
+                attributeName="transform"
+                attributeType="XML"
+                type="rotate"
+                from="0 0 0"
+                to="360 0 0"
+                dur="20s"
+                repeatCount="indefinite"/>
+        </circle>
+    </g>
+</svg>

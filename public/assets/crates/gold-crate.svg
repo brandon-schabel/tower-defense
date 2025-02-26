@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-32 -32 64 64">
+    <defs>
+        <!-- Gold Texture Gradient -->
+        <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#ffd700;stop-opacity:1" />
+            <stop offset="40%" style="stop-color:#ffcc00;stop-opacity:1" />
+            <stop offset="70%" style="stop-color:#e6b800;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#cc9900;stop-opacity:1" />
+        </linearGradient>
+        
+        <!-- Highlight Gleam -->
+        <linearGradient id="goldGleam" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#fff;stop-opacity:0.8" />
+            <stop offset="20%" style="stop-color:#fff;stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:#fff;stop-opacity:0" />
+        </linearGradient>
+        
+        <filter id="shadow" x="-0.2" y="-0.2" width="1.4" height="1.4">
+            <feDropShadow dx="2" dy="2" stdDeviation="1.5" flood-color="#000" flood-opacity="0.6"/>
+        </filter>
+        
+        <filter id="glow" x="-0.1" y="-0.1" width="1.2" height="1.2">
+            <feGaussianBlur stdDeviation="1" result="blur" />
+            <feFlood flood-color="#ffdd33" flood-opacity="0.5" result="glow" />
+            <feComposite in="glow" in2="blur" operator="in" result="softGlow" />
+            <feComposite in="SourceGraphic" in2="softGlow" operator="over" />
+        </filter>
+    </defs>
+    
+    <!-- Gold Crate -->
+    <g id="goldCrate" filter="url(#shadow)">
+        <!-- Base of the crate -->
+        <rect x="-16" y="-16" width="32" height="32" rx="3" ry="3" 
+              fill="url(#goldGradient)" stroke="#cc9900" stroke-width="2" filter="url(#glow)" />
+        
+        <!-- Decorative trim -->
+        <rect x="-14" y="-14" width="28" height="28" rx="2" ry="2" 
+              fill="none" stroke="#cc9900" stroke-width="1" />
+        
+        <!-- Corners -->
+        <path d="M-16 -16 L-12 -12 M16 -16 L12 -12 M-16 16 L-12 12 M16 16 L12 12" 
+              stroke="#cc9900" stroke-width="2" />
+        
+        <!-- Locks/Clasps -->
+        <rect x="-2" y="-16" width="4" height="4" rx="1" ry="1" 
+              fill="#cc9900" stroke="#996600" stroke-width="0.5" />
+        <rect x="-2" y="12" width="4" height="4" rx="1" ry="1" 
+              fill="#cc9900" stroke="#996600" stroke-width="0.5" />
+        <rect x="-16" y="-2" width="4" height="4" rx="1" ry="1" 
+              fill="#cc9900" stroke="#996600" stroke-width="0.5" />
+        <rect x="12" y="-2" width="4" height="4" rx="1" ry="1" 
+              fill="#cc9900" stroke="#996600" stroke-width="0.5" />
+        
+        <!-- Highlight gleam -->
+        <path d="M-10 -10 L-2 -2" stroke="url(#goldGleam)" stroke-width="4" stroke-linecap="round" />
+        <path d="M4 4 L8 8" stroke="url(#goldGleam)" stroke-width="2" stroke-linecap="round" />
+        
+        <!-- Treasure symbol -->
+        <g transform="translate(0, 0)">
+            <path d="M-8,-4 C-8,2 8,2 8,-4 L8,4 C8,10 -8,10 -8,4 Z" 
+                  fill="#cc9900" stroke="#996600" stroke-width="1" />
+            <path d="M-8,-4 C-8,0 8,0 8,-4" stroke="#996600" stroke-width="0.5" fill="none" />
+            <path d="M-4,-3 C-4,-1 4,-1 4,-3" stroke="#ffd700" stroke-width="1" fill="none" />
+        </g>
+        
+        <!-- Value markings -->
+        <text x="0" y="-8" font-family="Arial" font-size="6" font-weight="bold" fill="#996600" text-anchor="middle">PREMIUM</text>
+    </g>
+</svg>

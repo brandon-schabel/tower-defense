@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+    <defs>
+        <!-- Energy Effects -->
+        <radialGradient id="energyCore" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#fff;stop-opacity:1" />
+            <stop offset="30%" style="stop-color:#acf;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#28c;stop-opacity:0.8" />
+        </radialGradient>
+
+        <linearGradient id="tracerTail" x1="0%" y1="50%" x2="100%" y2="50%">
+            <stop offset="0%" style="stop-color:#5af;stop-opacity:0.8" />
+            <stop offset="60%" style="stop-color:#39d;stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:#28c;stop-opacity:0" />
+        </linearGradient>
+
+        <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+    </defs>
+
+    <!-- The entire projectile visual is designed to fit within a 40x40 square -->
+    <!-- The center point is exactly at 20,20 -->
+    <g>
+        <!-- Motion/Tracer Trail - Positioned to the left of center -->
+        <path d="M0,20 L14,20" stroke="url(#tracerTail)" stroke-width="10" filter="url(#blur)" stroke-linecap="round" />
+
+        <!-- Secondary Motion Trails -->
+        <path d="M2,17 L14,19" stroke="#39d" stroke-width="3" opacity="0.4" filter="url(#blur)" />
+        <path d="M2,23 L14,21" stroke="#39d" stroke-width="3" opacity="0.4" filter="url(#blur)" />
+
+        <!-- Main Projectile Energy Core - Exactly at center 20,20 with radius increased to 12px -->
+        <circle cx="20" cy="20" r="12" fill="url(#energyCore)" stroke="#fff" stroke-width="1" filter="url(#glow)" />
+
+        <!-- Directional Tip - Larger and positioned right of center -->
+        <path d="M22,14 L35,20 L22,26" fill="#5af" stroke="#fff" stroke-width="1" />
+
+        <!-- Energy Rings - Expanded to fill more of the visual space -->
+        <circle cx="20" cy="20" r="18" fill="none" stroke="#acf" stroke-width="1" opacity="0.6" />
+
+        <!-- Impact Point -->
+        <circle cx="28" cy="20" r="3" fill="#fff" opacity="0.8" />
+
+        <!-- Muzzle Flash Effect -->
+        <path d="M10,14 L15,19 M9,20 L16,20 M10,26 L15,21" stroke="#fff" stroke-width="1.5" opacity="0.5" />
+
+        <!-- Debug indicator for hitbox circle - exactly matches the 20px collision radius -->
+        <!-- This line can be commented out in production -->
+        <circle cx="20" cy="20" r="20" fill="none" stroke="#ff0000" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.5" />
+    </g>
+</svg>

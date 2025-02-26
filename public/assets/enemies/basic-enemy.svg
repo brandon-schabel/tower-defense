@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-32 -32 64 64">
+    <defs>
+        <!-- Soviet Metal Gradients -->
+        <linearGradient id="basicVehicleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#a33;stop-opacity:1" />
+            <stop offset="40%" style="stop-color:#c44;stop-opacity:1" />
+            <stop offset="70%" style="stop-color:#922;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#711;stop-opacity:1" />
+        </linearGradient>
+
+        <linearGradient id="basicWheels" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#777;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#555;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#333;stop-opacity:1" />
+        </linearGradient>
+
+        <filter id="shadow" x="-0.2" y="-0.2" width="1.4" height="1.4">
+            <feDropShadow dx="2" dy="2" stdDeviation="1.5" flood-color="#000" flood-opacity="0.6" />
+        </filter>
+    </defs>
+
+    <!-- Basic Enemy - Simple Soviet Jeep/Transport -->
+    <g id="basicEnemy" filter="url(#shadow)">
+        <!-- Wheels -->
+        <circle cx="-10" cy="8" r="5" fill="url(#basicWheels)" stroke="#000" stroke-width="1" />
+        <circle cx="10" cy="8" r="5" fill="url(#basicWheels)" stroke="#000" stroke-width="1" />
+        <circle cx="-10" cy="8" r="2" fill="#222" stroke="#000" stroke-width="0.5" />
+        <circle cx="10" cy="8" r="2" fill="#222" stroke="#000" stroke-width="0.5" />
+
+        <!-- Undercarriage -->
+        <rect x="-15" y="3" width="30" height="2" rx="1" ry="1" fill="#444" stroke="#000" stroke-width="0.5" />
+
+        <!-- Main Body - Simple Jeep -->
+        <path d="M-15 3 L15 3 L12 -5 L-12 -5 Z" fill="url(#basicVehicleGradient)" stroke="#000" stroke-width="1.5" />
+
+        <!-- Front Hood -->
+        <path d="M-12 -5 L-8 -10 L8 -10 L12 -5 Z" fill="#922" stroke="#000" stroke-width="1" />
+
+        <!-- Windshield -->
+        <path d="M-7 -10 L7 -10 L5 -15 L-5 -15 Z" fill="#99f" stroke="#000" stroke-width="0.5" opacity="0.7" />
+
+        <!-- Canvas Top -->
+        <path d="M-5 -15 L5 -15 L4 -18 L-4 -18 Z" fill="#964" stroke="#000" stroke-width="0.5" />
+        <path d="M-5 -15 L-4 -18 M5 -15 L4 -18" stroke="#000" stroke-width="0.5" stroke-dasharray="1 1" />
+
+        <!-- Simple Machine Gun -->
+        <rect x="-1" y="-22" width="2" height="4" fill="#444" stroke="#000" stroke-width="0.5" />
+        <rect x="-2" y="-18" width="4" height="3" fill="#555" stroke="#000" stroke-width="0.5" />
+
+        <!-- Soviet Star - Small -->
+        <path d="M0,-2 L1,-0.5 L3,0 L1.5,1 L2,2.5 L0,1.5 L-2,2.5 L-1.5,1 L-3,0 L-1,-0.5 Z" fill="#ff0" stroke="#000"
+            stroke-width="0.5" />
+
+        <!-- Headlights -->
+        <circle cx="-9" cy="-7" r="1.5" fill="#fa0" stroke="#000" stroke-width="0.5" />
+        <circle cx="9" cy="-7" r="1.5" fill="#fa0" stroke="#000" stroke-width="0.5" />
+        <circle cx="-9" cy="-7" r="0.75" fill="#ff6" />
+        <circle cx="9" cy="-7" r="0.75" fill="#ff6" />
+
+        <!-- Grill -->
+        <path d="M-6 -8 L6 -8" stroke="#000" stroke-width="0.5" />
+        <path d="M-5 -7 L5 -7 M-4 -9 L4 -9" stroke="#000" stroke-width="0.5" stroke-dasharray="1 1" />
+
+        <!-- Door Outlines -->
+        <path d="M-8 -5 L-8 3 M8 -5 L8 3" stroke="#000" stroke-width="0.5" stroke-dasharray="0.5 0.5" />
+
+        <!-- Exhaust Pipe -->
+        <rect x="-14" y="0" width="2" height="2" fill="#333" stroke="#000" stroke-width="0.5" />
+        <path d="M-13 0 L-13 -2" stroke="#666" stroke-width="0.5" />
+
+        <!-- Insignia / Number -->
+        <rect x="-3" y="0" width="6" height="2" rx="0.5" ry="0.5" fill="#922" stroke="#000" stroke-width="0.3" />
+    </g>
+</svg>

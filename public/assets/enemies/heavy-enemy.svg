@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-32 -32 64 64">
+    <defs>
+        <!-- Soviet Metal Gradients -->
+        <linearGradient id="heavyVehicleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#733;stop-opacity:1" />
+            <stop offset="40%" style="stop-color:#944;stop-opacity:1" />
+            <stop offset="70%" style="stop-color:#622;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#511;stop-opacity:1" />
+        </linearGradient>
+
+        <linearGradient id="heavyTreads" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#666;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#444;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#222;stop-opacity:1" />
+        </linearGradient>
+
+        <filter id="shadow" x="-0.2" y="-0.2" width="1.4" height="1.4">
+            <feDropShadow dx="2" dy="2" stdDeviation="1.5" flood-color="#000" flood-opacity="0.6" />
+        </filter>
+    </defs>
+
+    <!-- Heavy Enemy - Self-Propelled Artillery -->
+    <g id="heavyEnemy" filter="url(#shadow)">
+        <!-- Tank Treads - Extra Wide -->
+        <rect x="-22" y="10" width="44" height="10" rx="2" ry="2" fill="url(#heavyTreads)" stroke="#000"
+            stroke-width="2" />
+
+        <!-- Tread Details -->
+        <path d="M-20 15 L20 15" stroke="#000" stroke-width="0.5" />
+        <path d="M-20 13 L20 13 M-20 17 L20 17" stroke="#000" stroke-width="0.5" stroke-dasharray="3 3" />
+
+        <!-- Main Vehicle Body - Low Profile -->
+        <path d="M-20 10 L20 10 L18 0 L-18 0 Z" fill="url(#heavyVehicleGradient)" stroke="#000" stroke-width="2" />
+
+        <!-- Heavy Armor Plates -->
+        <rect x="-16" y="2" width="32" height="6" fill="#722" stroke="#000" stroke-width="1" />
+        <path d="M-16 5 L16 5" stroke="#000" stroke-width="0.5" stroke-dasharray="4 2" />
+
+        <!-- Artillery Mount -->
+        <path d="M-10 0 L10 0 L8 -8 L-8 -8 Z" fill="#822" stroke="#000" stroke-width="1.5" />
+
+        <!-- Massive Heavy Cannon -->
+        <rect x="-4" y="-28" width="8" height="20" fill="#555" stroke="#000" stroke-width="1.5" />
+        <circle cx="0" cy="-8" r="5" fill="#722" stroke="#000" stroke-width="1" />
+
+        <!-- Cannon Stabilizers -->
+        <path d="M-4 -15 L-10 -8 M4 -15 L10 -8" stroke="#555" stroke-width="2" stroke-linecap="round" />
+
+        <!-- Soviet Star Symbol -->
+        <path d="M0,6 L2,9 L6,10 L3,12 L4,16 L0,14 L-4,16 L-3,12 L-6,10 L-2,9 Z" fill="#ff0" stroke="#000"
+            stroke-width="0.5" />
+
+        <!-- Warning Stripe - Heavy Artillery -->
+        <path d="M-14 -4 L14 -4" stroke="#ff0" stroke-width="2" stroke-dasharray="4 4" />
+
+        <!-- Rivets and Bolts -->
+        <circle cx="-15" cy="-2" r="1" fill="#aaa" />
+        <circle cx="-10" cy="-2" r="1" fill="#aaa" />
+        <circle cx="-5" cy="-2" r="1" fill="#aaa" />
+        <circle cx="0" cy="-2" r="1" fill="#aaa" />
+        <circle cx="5" cy="-2" r="1" fill="#aaa" />
+        <circle cx="10" cy="-2" r="1" fill="#aaa" />
+        <circle cx="15" cy="-2" r="1" fill="#aaa" />
+
+        <!-- Additional Detailing -->
+        <rect x="-22" y="4" width="2" height="4" fill="#333" stroke="#000" stroke-width="0.5" />
+        <rect x="20" y="4" width="2" height="4" fill="#333" stroke="#000" stroke-width="0.5" />
+
+        <!-- Ammo Storage Box -->
+        <rect x="12" y="-6" width="6" height="4" rx="1" ry="1" fill="#555" stroke="#000" stroke-width="0.5" />
+        <rect x="-18" y="-6" width="6" height="4" rx="1" ry="1" fill="#555" stroke="#000" stroke-width="0.5" />
+
+        <!-- Exhaust Stacks -->
+        <rect x="-16" y="0" width="3" height="8" fill="#333" stroke="#000" stroke-width="0.5" />
+        <path d="M-14.5 0 L-14.5 -4" stroke="#888" stroke-width="1.5" />
+        <rect x="13" y="0" width="3" height="8" fill="#333" stroke="#000" stroke-width="0.5" />
+        <path d="M14.5 0 L14.5 -4" stroke="#888" stroke-width="1.5" />
+        <path d="M-15 -1 L-17 -4 M14.5 -1 L16.5 -4" stroke="#999" stroke-width="0.7" />
+    </g>
+</svg>

@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-32 -32 64 64">
+    <defs>
+        <!-- Amber Background Gradient -->
+        <radialGradient id="resourcesGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" style="stop-color:#ffbb44;stop-opacity:1" />
+            <stop offset="70%" style="stop-color:#ee8822;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#cc6600;stop-opacity:1" />
+        </radialGradient>
+
+        <!-- Coin Gradient -->
+        <linearGradient id="coinGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#ffd700;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#ffcc00;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#cc9900;stop-opacity:1" />
+        </linearGradient>
+
+        <!-- Power-up Glow -->
+        <filter id="powerupGlow" x="-0.2" y="-0.2" width="1.4" height="1.4">
+            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feFlood flood-color="#ffbb44" flood-opacity="0.7" result="glow" />
+            <feComposite in="glow" in2="blur" operator="in" result="softGlow" />
+            <feComposite in="SourceGraphic" in2="softGlow" operator="over" />
+        </filter>
+
+        <!-- Highlight Gleam -->
+        <linearGradient id="highlightGleam" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#fff;stop-opacity:0.9" />
+            <stop offset="100%" style="stop-color:#fff;stop-opacity:0" />
+        </linearGradient>
+    </defs>
+
+    <!-- Resources Power-up -->
+    <g id="resourcesPowerup" filter="url(#powerupGlow)">
+        <!-- Base circle -->
+        <circle cx="0" cy="0" r="16" fill="url(#resourcesGradient)" stroke="#cc6600" stroke-width="2" />
+
+        <!-- Resource Pile Symbol -->
+        <g transform="translate(0, 1)">
+            <!-- Coin 1 -->
+            <ellipse cx="-6" cy="2" rx="6" ry="4" fill="url(#coinGradient)" stroke="#cc9900" stroke-width="0.7" />
+            <ellipse cx="-6" cy="2" rx="4" ry="2.5" fill="none" stroke="#cc9900" stroke-width="0.3" />
+            <path d="M-7,0 L-7,4 M-5,0 L-5,4" stroke="#cc9900" stroke-width="0.3" />
+
+            <!-- Coin 2 -->
+            <ellipse cx="0" cy="-2" rx="6" ry="4" fill="url(#coinGradient)" stroke="#cc9900" stroke-width="0.7" />
+            <ellipse cx="0" cy="-2" rx="4" ry="2.5" fill="none" stroke="#cc9900" stroke-width="0.3" />
+            <path d="M-1,-4 L-1,0 M1,-4 L1,0" stroke="#cc9900" stroke-width="0.3" />
+
+            <!-- Coin 3 -->
+            <ellipse cx="6" cy="2" rx="6" ry="4" fill="url(#coinGradient)" stroke="#cc9900" stroke-width="0.7" />
+            <ellipse cx="6" cy="2" rx="4" ry="2.5" fill="none" stroke="#cc9900" stroke-width="0.3" />
+            <path d="M5,0 L5,4 M7,0 L7,4" stroke="#cc9900" stroke-width="0.3" />
+
+            <!-- Sparkle -->
+            <path d="M-8,-5 L-6,-5 M-7,-6 L-7,-4" stroke="#fff" stroke-width="1" />
+            <path d="M7,-6 L9,-6 M8,-7 L8,-5" stroke="#fff" stroke-width="1" />
+            <path d="M0,6 L2,6 M1,5 L1,7" stroke="#fff" stroke-width="1" />
+        </g>
+
+        <!-- Dollar/Currency Symbol -->
+        <path d="M0,-10 L0,-8 M0,8 L0,10 M-2,-8 C-4,-8 -6,-6 -6,-4 C-6,-2 -4,0 0,0 C4,0 6,2 6,4 C6,6 4,8 2,8 L-2,8"
+            stroke="#fff" stroke-width="1.5" fill="none" />
+
+        <!-- Resource Particles -->
+        <circle cx="-10" cy="-6" r="1" fill="#fff" />
+        <circle cx="12" cy="-8" r="1" fill="#fff" />
+        <circle cx="-8" cy="10" r="1" fill="#fff" />
+        <circle cx="9" cy="9" r="1" fill="#fff" />
+
+        <!-- Value Indicators -->
+        <path d="M-14,-4 L-16,-4 M-14,0 L-17,0 M-14,4 L-16,4" stroke="#ffe066" stroke-width="1" />
+        <path d="M14,-4 L16,-4 M14,0 L17,0 M14,4 L16,4" stroke="#ffe066" stroke-width="1" />
+
+        <!-- Highlight gleam -->
+        <path d="M-8,-8 L-2,-2" stroke="url(#highlightGleam)" stroke-width="3" stroke-linecap="round" />
+
+        <!-- Orbital ring -->
+        <circle cx="0" cy="0" r="20" fill="none" stroke="#ffbb44" stroke-width="0.5" stroke-dasharray="2 3"
+            stroke-opacity="0.7" />
+    </g>
+</svg>

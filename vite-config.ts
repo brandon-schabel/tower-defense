@@ -8,4 +8,5 @@ export default defineConfig({
   server: {
     port: 3011,
   },
+  publicDir: 'public'
 });

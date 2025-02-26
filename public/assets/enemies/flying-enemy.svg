@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-32 -32 64 64">
+    <defs>
+        <!-- Soviet Metal Gradients -->
+        <linearGradient id="flyingVehicleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#a33;stop-opacity:1" />
+            <stop offset="40%" style="stop-color:#c44;stop-opacity:1" />
+            <stop offset="70%" style="stop-color:#922;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#711;stop-opacity:1" />
+        </linearGradient>
+
+        <linearGradient id="rotorGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#aaa;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#444;stop-opacity:1" />
+        </linearGradient>
+
+        <filter id="shadow" x="-0.2" y="-0.2" width="1.4" height="1.4">
+            <feDropShadow dx="2" dy="2" stdDeviation="1.5" flood-color="#000" flood-opacity="0.6" />
+        </filter>
+
+        <!-- Animation for rotors -->
+        <animateTransform id="rotorSpin" attributeName="transform" attributeType="XML" type="rotate" from="0 0 0"
+            to="360 0 0" dur="0.5s" repeatCount="indefinite" />
+    </defs>
+
+    <!-- Flying Enemy - Soviet Helicopter -->
+    <g id="flyingEnemy" filter="url(#shadow)">
+        <!-- Shadow on ground (faint) -->
+        <ellipse cx="0" cy="16" rx="15" ry="5" fill="#000" opacity="0.2" />
+
+        <!-- Main Body -->
+        <path d="M-16 0 L16 0 C14 8, -14 8, -16 0 Z" fill="url(#flyingVehicleGradient)" stroke="#000"
+            stroke-width="1.5" />
+
+        <!-- Cockpit Windshield -->
+        <path d="M-8 0 L8 0 C7 -8, -7 -8, -8 0 Z" fill="#99f" stroke="#000" stroke-width="1" opacity="0.7" />
+
+        <!-- Tail Boom -->
+        <path d="M0 0 L-20 -5 L-20 -2 L0 3 Z" fill="#922" stroke="#000" stroke-width="1" />
+
+        <!-- Tail Rotor -->
+        <g transform="translate(-20, -3.5)">
+            <rect x="-1" y="-5" width="2" height="10" fill="#444" stroke="#000" stroke-width="0.5" />
+            <g>
+                <use href="#tailRotor" />
+                <animateTransform attributeName="transform" attributeType="XML" type="rotate" from="0 0 0" to="360 0 0"
+                    dur="0.2s" repeatCount="indefinite" />
+            </g>
+        </g>
+        <g id="tailRotor">
+            <rect x="-6" y="-1" width="12" height="2" fill="#888" stroke="#000" stroke-width="0.5" />
+        </g>
+
+        <!-- Main Rotor Mast -->
+        <rect x="-2" y="-2" width="4" height="-10" fill="#555" stroke="#000" stroke-width="1" />
+
+        <!-- Main Rotor -->
+        <g>
+            <g transform="translate(0, -12)">
+                <rect x="-24" y="-1.5" width="48" height="3" fill="url(#rotorGradient)" stroke="#000"
+                    stroke-width="0.5">
+                    <animateTransform attributeName="transform" attributeType="XML" type="rotate" from="0 0 0"
+                        to="360 0 0" dur="0.3s" repeatCount="indefinite" />
+                </rect>
+            </g>
+        </g>
+
+        <!-- Weapon Mounts -->
+        <rect x="-12" y="2" width="4" height="4" rx="1" ry="1" fill="#555" stroke="#000" stroke-width="0.5" />
+        <rect x="8" y="2" width="4" height="4" rx="1" ry="1" fill="#555" stroke="#000" stroke-width="0.5" />
+
+        <!-- Missile Pods -->
+        <rect x="-13" y="6" width="6" height="3" fill="#333" stroke="#000" stroke-width="0.5" />
+        <rect x="7" y="6" width="6" height="3" fill="#333" stroke="#000" stroke-width="0.5" />
+
+        <!-- Soviet Star -->
+        <path d="M0,2 L1.5,4 L4,4.5 L2,6 L2.5,8.5 L0,7 L-2.5,8.5 L-2,6 L-4,4.5 L-1.5,4 Z" fill="#ff0" stroke="#000"
+            stroke-width="0.5" />
+
+        <!-- Landing Struts -->
+        <path d="M-10 8 L-8 14 M10 8 L8 14" stroke="#555" stroke-width="2" />
+        <path d="M-12 14 L-4 14 M4 14 L12 14" stroke="#555" stroke-width="2" />
+
+        <!-- Hovering Effect -->
+        <path d="M-8 16 L-5 14 M8 16 L5 14" stroke="#99f" stroke-width="0.5" stroke-dasharray="1 1" opacity="0.7" />
+
+        <!-- Navigation Lights -->
+        <circle cx="-16" cy="0" r="1" fill="#0f0" />
+        <circle cx="16" cy="0" r="1" fill="#f00" />
+        <circle cx="0" cy="-10" r="1" fill="#ff0" />
+    </g>
+</svg>

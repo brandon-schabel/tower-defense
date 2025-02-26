@@ -8,74 +8,70 @@
             <stop offset="60%" style="stop-color:#667;stop-opacity:1" />
             <stop offset="100%" style="stop-color:#556;stop-opacity:1" />
         </linearGradient>
-        
+
         <linearGradient id="factionBlue" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" style="stop-color:#28c;stop-opacity:1" />
             <stop offset="40%" style="stop-color:#39d;stop-opacity:1" />
             <stop offset="80%" style="stop-color:#17b;stop-opacity:1" />
             <stop offset="100%" style="stop-color:#069;stop-opacity:1" />
         </linearGradient>
-        
+
         <radialGradient id="corePower" cx="50%" cy="50%" r="50%">
             <stop offset="0%" style="stop-color:#fff;stop-opacity:0.9" />
             <stop offset="30%" style="stop-color:#acf;stop-opacity:0.8" />
             <stop offset="70%" style="stop-color:#28c;stop-opacity:0.7" />
             <stop offset="100%" style="stop-color:#069;stop-opacity:0.6" />
         </radialGradient>
-        
+
         <filter id="shadow" x="-0.2" y="-0.2" width="1.4" height="1.4">
-            <feDropShadow dx="3" dy="3" stdDeviation="2" flood-color="#000" flood-opacity="0.7"/>
+            <feDropShadow dx="3" dy="3" stdDeviation="2" flood-color="#000" flood-opacity="0.7" />
         </filter>
 
         <g id="base">
             <!-- Main Platform -->
-            <rect x="-24" y="-24" width="48" height="48" rx="3" ry="3"
-                  fill="url(#metalGradient)" stroke="#000" stroke-width="2" />
-                  
+            <rect x="-24" y="-24" width="48" height="48" rx="3" ry="3" fill="url(#metalGradient)" stroke="#000"
+                stroke-width="2" />
+
             <!-- Faction Color Accents -->
-            <rect x="-22" y="-22" width="44" height="6" 
-                  fill="url(#factionBlue)" stroke="#005" stroke-width="1" />
-            <rect x="-22" y="16" width="44" height="6" 
-                  fill="url(#factionBlue)" stroke="#005" stroke-width="1" />
-                  
+            <rect x="-22" y="-22" width="44" height="6" fill="url(#factionBlue)" stroke="#005" stroke-width="1" />
+            <rect x="-22" y="16" width="44" height="6" fill="url(#factionBlue)" stroke="#005" stroke-width="1" />
+
             <!-- Industrial Warning Stripes -->
             <rect x="-20" y="-14" width="40" height="4" fill="#222" />
             <path d="M-20 -12 L20 -12" stroke="#ff0" stroke-width="1" stroke-dasharray="4 4" />
             <rect x="-20" y="10" width="40" height="4" fill="#222" />
             <path d="M-20 12 L20 12" stroke="#ff0" stroke-width="1" stroke-dasharray="4 4" />
-            
+
             <!-- Construction Crane -->
-            <path d="M-12 -16 L-12 -28 L-4 -28 L-4 -16" fill="none" 
-                  stroke="#444" stroke-width="2" />
+            <path d="M-12 -16 L-12 -28 L-4 -28 L-4 -16" fill="none" stroke="#444" stroke-width="2" />
             <path d="M-14 -26 L-2 -26 L-2 -24 L-14 -24 Z" fill="#555" stroke="#000" />
-            
+
             <!-- Core Power Structure -->
             <circle cx="0" cy="0" r="12" fill="url(#metalGradient)" stroke="#000" stroke-width="2" />
             <circle cx="0" cy="0" r="8" fill="url(#corePower)" />
-            
+
             <!-- Industrial Details -->
             <circle cx="-16" cy="-16" r="4" fill="#444" stroke="#000" />
             <circle cx="16" cy="-16" r="4" fill="#444" stroke="#000" />
             <circle cx="-16" cy="16" r="4" fill="#444" stroke="#000" />
             <circle cx="16" cy="16" r="4" fill="#444" stroke="#000" />
-            
+
             <!-- Construction Details -->
             <rect x="8" y="-10" width="8" height="20" fill="#555" stroke="#000" />
-            <path d="M8 -6 L16 -6 M8 -2 L16 -2 M8 2 L16 2 M8 6 L16 6" 
-                  stroke="#333" stroke-width="1" />
-            
+            <path d="M8 -6 L16 -6 M8 -2 L16 -2 M8 2 L16 2 M8 6 L16 6" stroke="#333" stroke-width="1" />
+
             <!-- Rivets -->
             <circle cx="-18" cy="-18" r="1" fill="#aaa" />
             <circle cx="18" cy="-18" r="1" fill="#aaa" />
             <circle cx="-18" cy="18" r="1" fill="#aaa" />
             <circle cx="18" cy="18" r="1" fill="#aaa" />
-            
+
             <!-- Antenna -->
             <path d="M0 -14 L0 -20 M-2 -18 L2 -18" stroke="#888" stroke-width="1.5" />
             <circle cx="0" cy="-21" r="1.5" fill="#f00" />
         </g>
     </defs>
-    
+
     <!-- Place the base for preview -->
     <use href="#base" filter="url(#shadow)" />
-</svg> 
+</svg>
