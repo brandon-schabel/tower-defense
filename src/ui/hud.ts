@@ -1,6 +1,7 @@
 import Tower from "../entities/tower";
 import GameScene from "../scenes/game-scene";
 import { GAME_SETTINGS, TowerType } from "../settings";
+import { EquipmentItem, GameItem } from "../types/item";
 
 // New enums
 enum ItemSlot {
@@ -53,7 +54,7 @@ interface ResearchNode {
   }[];
 }
 
-class ResearchTree {
+export class ResearchTree {
   private static instance: ResearchTree;
   private researchLevels: { [key: string]: number } = {};
   private researchNodes: ResearchNode[] = [
@@ -389,7 +390,7 @@ export default class HUD {
       const slotDiv = document.createElement('div');
       slotDiv.className = `item-slot ${slot}-slot`;
 
-      const item = equippedItems.get(slot);
+      const item = equippedItems.get(slot) as EquipmentItem | undefined;
       if (item) {
         slotDiv.innerHTML = `
           <img src="/assets/${item.texture || 'item-default'}.svg" alt="${item.name}" />
@@ -399,7 +400,7 @@ export default class HUD {
             <p class="item-stats">${this.formatItemStats(item.stats)}</p>
           </div>
         `;
-        slotDiv.addEventListener('click', () => this.gameScene.unequipItem(item));
+        slotDiv.addEventListener('click', () => this.gameScene.unequipItem(item.slot));
       }
 
       equippedSection.appendChild(slotDiv);
@@ -427,9 +428,9 @@ export default class HUD {
       `;
 
       itemDiv.addEventListener('click', () => {
-        this.gameScene.equipItem(item);
+        this.gameScene.equipItem(item as unknown as GameItem);
         overlay.remove();
-        this.showInventory(); // Refresh inventory
+        this.showInventory();
       });
 
       inventoryGrid.appendChild(itemDiv);

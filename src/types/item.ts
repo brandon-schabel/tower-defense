@@ -111,4 +111,22 @@ export interface DroppedItem {
     x: number;
     y: number;
     sprite?: Phaser.Physics.Arcade.Sprite;
+}
+
+export interface EquipmentItem extends GameItem {
+    slot: string;
+    stats: {
+        healthBonus?: number;
+        damageBonus?: number;
+        speedBonus?: number;
+        rangeBonus?: number;
+        specialEffect?: {
+            type: string;
+            chance: number;
+            power: number;
+        };
+    };
+    description: string;
+    texture: string;
+    tier: number;
 } 

@@ -7,5 +7,7 @@ export enum EnemyType {
   Heavy = 'heavy',
   Boss = 'boss',
   Flying = 'flying',
-  Basic = 'basic'  // Added for backward compatibility
+  Basic = 'basic',
+  Tank = 'tank',
+  Strong = 'strong'
 } 

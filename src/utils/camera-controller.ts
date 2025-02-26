@@ -1,4 +1,3 @@
-// src/utils/camera-controller.ts
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 
@@ -8,6 +7,9 @@ export default class CameraController {
     private camera: Phaser.Cameras.Scene2D.Camera;
     private lastPlayerX: number;
     private lastPlayerY: number;
+    private isDragging: boolean = false;
+    private dragStartX: number = 0;
+    private dragStartY: number = 0;
 
     private zoomLevel: number = 1;
     private minZoom: number = 0.5;
@@ -29,11 +31,49 @@ export default class CameraController {
         this.camera.startFollow(this.player, true, 0.08, 0.08);
 
         // Add zoom controls
-        this.scene.input.on('wheel', (pointer: Phaser.Input.Pointer, gameObjects: any, deltaX: number, deltaY: number) => {
+        this.scene.input.on('wheel', (_: Phaser.Input.Pointer, __: any, ___: number, deltaY: number) => {
             if (deltaY > 0) {
                 this.zoomOut();
             } else {
                 this.zoomIn();
+            }
+        });
+
+        // Add middle mouse button dragging
+        this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            if (pointer.middleButtonDown()) {
+                this.isDragging = true;
+                this.dragStartX = pointer.x;
+                this.dragStartY = pointer.y;
+                this.camera.stopFollow();
+            }
+        });
+
+        this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (this.isDragging) {
+                const deltaX = this.dragStartX - pointer.x;
+                const deltaY = this.dragStartY - pointer.y;
+
+                this.camera.scrollX += deltaX / this.camera.zoom;
+                this.camera.scrollY += deltaY / this.camera.zoom;
+
+                this.dragStartX = pointer.x;
+                this.dragStartY = pointer.y;
+            }
+        });
+
+        this.scene.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+            if (pointer.middleButtonReleased()) {
+                this.isDragging = false;
+            }
+        });
+
+        // Key to toggle camera follow
+        this.scene.input.keyboard?.addKey('F').on('down', () => {
+            if (this.isCameraFollowingPlayer()) {
+                this.camera.stopFollow();
+            } else {
+                this.camera.startFollow(this.player, true, 0.08, 0.08);
             }
         });
 
@@ -49,6 +89,11 @@ export default class CameraController {
         }
     }
 
+    private isCameraFollowingPlayer(): boolean {
+        // Check if the camera's current target is the player
+        return this.camera.hasOwnProperty('_follow') && (this.camera as any)._follow === this.player;
+    }
+
     private zoomIn() {
         this.zoomLevel = Math.min(this.maxZoom, this.zoomLevel + this.zoomSpeed);
         this.camera.setZoom(this.zoomLevel);
@@ -60,12 +105,11 @@ export default class CameraController {
     }
 
     update() {
-        // Track player movement
-        const dx = this.player.x - this.lastPlayerX;
-        const dy = this.player.y - this.lastPlayerY;
-
-        // Store current position for next frame
-        this.lastPlayerX = this.player.x;
-        this.lastPlayerY = this.player.y;
+        // Only track player movement if we're following them
+        if (this.isCameraFollowingPlayer()) {
+            // Store current position for next frame
+            this.lastPlayerX = this.player.x;
+            this.lastPlayerY = this.player.y;
+        }
     }
 }
