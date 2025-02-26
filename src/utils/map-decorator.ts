@@ -1,7 +1,6 @@
-// src/utils/map-decorator.ts
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import TileMapManager from "./tile-map-manager";
+import TileMapManager from "../managers/tile-map-manager";
 
 export default class MapDecorator {
     private scene: GameScene;

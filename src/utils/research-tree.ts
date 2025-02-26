@@ -1,5 +1,3 @@
-// src/utils/research-tree.ts
-import { GAME_SETTINGS } from "../settings";
 
 export enum ResearchCategory {
     Tower = 'tower',
