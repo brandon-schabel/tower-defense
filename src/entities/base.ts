@@ -1,10 +1,11 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import { HealthComponent } from "../utils/health-component"; // Import HealthComponent
-import { GAME_SETTINGS } from "../settings"; // Import
+import { HealthComponent } from "../utils/health-component";
+import { gameConfig } from "../utils/app-config";
+import { GAME_SETTINGS } from "../settings";
 
 export default class Base extends Phaser.Physics.Arcade.Sprite {
-    private healthComponent: HealthComponent; // Replace healthBar and health properties
+    private healthComponent: HealthComponent;
 
     constructor(scene: GameScene, x: number, y: number) {
         super(scene, x, y, "base");
@@ -12,17 +13,19 @@ export default class Base extends Phaser.Physics.Arcade.Sprite {
         scene.add.existing(this);
         scene.physics.add.existing(this, true);
 
-        // Set size, color, and position from settings
-        this.setDisplaySize(GAME_SETTINGS.base.size.width, GAME_SETTINGS.base.size.height);
-        this.setTint(GAME_SETTINGS.base.color);
-        this.setPosition(GAME_SETTINGS.base.position.x, GAME_SETTINGS.base.position.y);
+        // Get config with fallback to GAME_SETTINGS
+        const config = gameConfig.getConfig("base") || GAME_SETTINGS.base;
+        
+        this.setDisplaySize(config.size.width, config.size.height);
+        this.setTint(config.color);
+        this.setPosition(x, y);
 
-        // Initialize health component with base settings
+        // Initialize health component
         this.healthComponent = new HealthComponent(
             this,
             scene,
-            GAME_SETTINGS.base.initialHealth,
-            GAME_SETTINGS.base.initialHealth,
+            config.initialHealth,
+            config.initialHealth,
             () => {
                 console.log("Base destroyed!");
                 this.destroy();

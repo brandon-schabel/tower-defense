@@ -22,7 +22,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     private lastAbilityUse: Map<string, number> = new Map();
 
     constructor(scene: GameScene, x: number, y: number, health: number, speed: number, onDeath: () => void, type: EnemyType = EnemyType.Basic, tier: number = 1) {
-        super(scene, x, y, "enemy");
+        super(scene, x, y, `${type}-enemy`);
         this.setScale(0.5);
         this.onDeath = onDeath;
 
@@ -37,11 +37,11 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
             () => {
                 if (this.burnTimer) this.burnTimer.remove();
                 if (this.slowTimer) this.slowTimer.remove();
-                
+
                 this.handleDropsOnDeath();
-                
+
                 this.destroy();
-                
+
                 this.onDeath();
             }
         );
@@ -63,6 +63,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.healthComponent.update();
 
         const currentTime = this.scene.time.now;
+        this.setData('type', this.enemyType);
 
         this.specialAbilities.forEach((data, type) => {
             const lastUse = this.lastAbilityUse.get(type) || 0;
@@ -117,7 +118,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
         const player = gameScene.getUser();
         const towers: Phaser.Physics.Arcade.Sprite[] = [];
-        
+
         const base = gameScene.getBase();
 
         let closestTarget: Phaser.Physics.Arcade.Sprite | null = null;
@@ -163,16 +164,46 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         return targets;
     }
 
-    takeDamage(amount: number) {
-        this.healthComponent.takeDamage(amount);
+    takeDamage(damage: number) {
+        if (!this.active || !this.scene) return; // Skip if destroyed or scene is null
+
+        this.healthComponent.takeDamage(damage);
+
+        // Visual feedback only if scene is available
+        if (this.scene && this.scene.add) {
+            const damageText = this.scene.add.text(
+                this.x,
+                this.y - 20,
+                `-${damage}`,
+                {
+                    fontSize: '16px',
+                    color: '#ff0000',
+                    stroke: '#000000',
+                    strokeThickness: 3
+                }
+            ).setOrigin(0.5);
+
+            this.scene.tweens.add({
+                targets: damageText,
+                y: this.y - 40,
+                alpha: 0,
+                duration: 800,
+                onComplete: () => damageText.destroy()
+            });
+
+            this.setTint(0xff0000);
+            this.scene.time.delayedCall(100, () => {
+                if (this.active) this.clearTint();
+            });
+        }
     }
-    
+
     private handleDropsOnDeath(): void {
         const gameScene = this.scene as GameScene;
         const itemDropManager = gameScene.getItemDropManager();
-        
+
         if (!itemDropManager) return;
-        
+
         itemDropManager.dropRandomItem(this.x, this.y);
     }
 

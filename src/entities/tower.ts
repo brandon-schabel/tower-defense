@@ -1,13 +1,13 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import { GAME_SETTINGS, TowerType } from "../settings";
-import TileMapManager from "../utils/tile-map-manager";
+import { TowerType, TowerSettings } from "../settings";
 import Enemy from "./enemy";
 import { HealthComponent } from "../utils/health-component";
+import { gameConfig } from "../utils/app-config";
 
 export default class Tower extends Phaser.Physics.Arcade.Sprite {
     towerType: TowerType;
-    private towerData: typeof GAME_SETTINGS.towers[TowerType];
+    private towerData: TowerSettings;
     private lastShotTime: number = 0;
     // @ts-ignore
     private shootCooldown: number | null = null;
@@ -33,69 +33,57 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         5: 2.5   // 150% improvement
     };
 
+
+
     constructor(scene: GameScene, tileX: number, tileY: number, type: TowerType) {
-        // Get world position from tiles
         const tileMapManager = scene.getTileMapManager();
         const worldPos = tileMapManager.tileToWorld(tileX, tileY);
-
         super(scene, worldPos.x, worldPos.y, type);
-
         this.towerType = type;
-        this.towerData = { ...GAME_SETTINGS.towers[type] };
-        this.shootCooldown = this.towerData.shootCooldown;
 
+        const towerConfig = gameConfig.getConfig("towers")?.[type];
+        if (!towerConfig) throw new Error(`Invalid tower configuration for type: ${type}`);
+        this.towerData = towerConfig;
+
+        // NOW we can access towerData
+        this.shootCooldown = this.towerData.shootCooldown;
         this.tileX = tileX;
         this.tileY = tileY;
         this.tileWidth = this.towerData.size.width;
         this.tileHeight = this.towerData.size.height;
 
         scene.add.existing(this);
-        scene.physics.add.existing(this, true); // true = static body
-        this.setOrigin(0.5, 0.5); // Center the sprite
+        scene.physics.add.existing(this, true);
+        this.setOrigin(0.5, 0.5);
         this.setScale(this.towerData.scale);
 
-        // Make tower clickable
-        this.setInteractive();
-        this.on("pointerdown", () => (this.scene as GameScene).selectTower(this));
-
-        // Initialize health component with tower health and death callback
-        this.healthComponent = new HealthComponent(
-            this,
-            scene,
-            this.towerData.health,
-            this.towerData.health,
-            () => {
-                const gameScene = this.scene as GameScene;
-                
-                // 1) Remove from group first using a public method
-                gameScene.removeTower(this);
-                
-                // 2) Destroy the tower
-                this.destroyTower();
-                console.log(`${this.towerType} destroyed!`);
-                
-                // 3) Force recalc
-                gameScene.recalculateEnemyTargets();
-                
-                // 4) (Optional) Force immediate re-update.
-                gameScene.forceEnemyUpdate();
-            }
-        );
-
-        // Mark tiles as occupied
-        tileMapManager.occupyTiles(tileX, tileY, this.tileWidth, this.tileHeight, 'tower', this.getId());
+        this.healthComponent = new HealthComponent(this, scene, this.towerData.health, this.towerData.health, () => {
+            scene.removeTower(this);
+            this.destroyTower();
+        });
     }
 
     private getCurrentShootCooldown(): number {
-        const baseCooldown = this.towerData.shootCooldown;
+        const baseCooldown = gameConfig.getConfig("towers")?.[this.towerType].shootCooldown || -1;
         // Increase speed improvement from 15% to 20% per level
         const reduction = 0.2 * this.speedLevel;
         // Apply tier multiplier (higher tier = faster shooting)
+        if (baseCooldown === -1) {
+            console.error(`Base cooldown not found for tower type: ${this.towerType}`);
+            return -1;
+        }
         return baseCooldown * (1 - reduction) / this.getTierMultiplier();
     }
 
     getCurrentRange(): number {
-        const baseRange = this.towerData.range;
+        const baseRange = (gameConfig.getConfig("towers")?.[this.towerType].range) || -1;
+
+
+        if (baseRange === -1) {
+            console.error(`Base range not found for tower type: ${this.towerType}`);
+            return -1;
+        }
+
         // Increase range bonus from 30 to 40 pixels per level
         const upgradedRange = baseRange + 40 * this.rangeLevel;
         // Apply tier multiplier (higher tier = better range)
@@ -103,7 +91,13 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     }
 
     getCurrentDamage(): number {
-        const baseDamage = this.towerData.damage;
+        const baseDamage = (gameConfig.getConfig("towers")?.[this.towerType].damage) || -1;
+
+        if (baseDamage === -1) {
+            console.error(`Base damage not found for tower type: ${this.towerType}`);
+            return -1;
+        }
+
         // Increase damage bonus from 25% to 30% per level
         let damage = baseDamage * (1 + 0.3 * this.damageLevel);
 
@@ -111,7 +105,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
             // Increase critical bonus from 30% to 50%
             damage += baseDamage * 0.5;
         }
-        
+
         // Apply tier multiplier (higher tier = more damage)
         return damage * this.getTierMultiplier();
     }
@@ -125,22 +119,27 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     // Get the cost to upgrade to the next tier
     public getTierUpgradeCost(): number {
         if (this.tier >= this.maxTier) return Infinity;
-        return this.towerData.price * this.tier; // Base price * current tier
+        const basePrice = (gameConfig.getConfig("towers")?.[this.towerType].price) || -1;
+        if (basePrice === -1) {
+            console.error(`Base price not found for tower type: ${this.towerType}`);
+            return -1;
+        }
+        return basePrice * this.tier; // Base price * current tier
     }
 
     // Upgrade the tower to the next tier
     public upgradeTier(): boolean {
         if (this.tier >= this.maxTier) return false;
-        
+
         this.tier++;
-        
+
         // Visual indication of upgraded tier (e.g., tinting)
         this.updateTierAppearance();
-        
+
         // Also increase health for higher tiers
         const newMaxHealth = this.towerData.health * this.getTierMultiplier();
         this.healthComponent.setMaxHealth(newMaxHealth, true);
-        
+
         return true;
     }
 
@@ -154,9 +153,9 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
             4: 0xff00ff, // Purple for tier 4
             5: 0xff0000  // Red for tier 5
         };
-        
+
         this.setTint(tierColors[this.tier as 1 | 2 | 3 | 4 | 5]);
-        
+
         // Scale slightly larger with each tier
         this.setScale(this.towerData.scale * (1 + (this.tier - 1) * 0.1));
     }
@@ -230,7 +229,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         const gameScene = this.scene as GameScene;
         const damage = this.getCurrentDamage();
 
-        gameScene.shootProjectile(this, target, damage);
+        gameScene.shootProjectile(this, target.x, target.y, damage, this.towerData.projectileType);
         this.shotsFired++;
     }
 
@@ -252,69 +251,84 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     }
 
     update() {
-        if (!this.scene || !this.active) {
-            return;
-        }
-        
-        // Update health component
+        if (!this.scene || !this.active) return;
         this.healthComponent.update();
-        
+        this.handleShooting();
+    }
+
+    private handleShooting() {
         const currentTime = this.scene.time.now;
         const gameScene = this.scene as GameScene;
-
-        // Get projectile settings based on tower type
-        const projectileType = GAME_SETTINGS.towers[this.towerType].projectileType;
-        const projectileSettings = GAME_SETTINGS.projectiles[projectileType];
-
+        const projectileType = gameConfig.getConfig("towers")?.[this.towerType].projectileType || 'normal';
+        // const projectileSettings = gameConfig.getConfig("projectiles")?.[projectileType] || {}; // No longer used
         if (this.towerType === 'area-tower') {
-            // Area tower logic
-            if (currentTime - this.lastShotTime >= this.getCurrentShootCooldown()) {
-                const enemiesInRange = gameScene.getEnemies().filter(enemy => {
-                    const distance = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
-                    return distance < this.getCurrentRange(); // Use current range
-                });
+            this.handleAreaTowerShooting(currentTime, gameScene);
+        } else {
+            this.handleSingleTargetTowerShooting(currentTime, gameScene, projectileType);
+        }
+    }
+
+    private handleAreaTowerShooting(currentTime: number, gameScene: GameScene) {
+        if (currentTime - this.lastShotTime >= this.getCurrentShootCooldown()) {
+            // Filter to ensure we only get actual enemies within range
+            const enemiesInRange = gameScene.getEnemies().filter(enemy => {
+                // Make sure it's an Enemy instance
+                if (!(enemy instanceof Enemy)) return false;
+
+                // Check if it's in range
+                const distance = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
+                return distance < this.getCurrentRange();
+            });
+
+            // Only shoot if there are enemies in range
+            if (enemiesInRange.length > 0) {
                 enemiesInRange.forEach(enemy => {
-                    // Use projectileSettings.damage instead of this.getCurrentDamage()
-                    const damage = projectileSettings.damage;
-                    // Pass special effect to shootProjectile
+                    const damage = this.getCurrentDamage();
                     if (this.specialPower === "fire") {
-                        gameScene.shootProjectile(this, enemy, damage, "fire"); // Example burn damage
+                        // Pass the special power as the projectile type
+                        gameScene.shootProjectile(this, enemy.x, enemy.y, damage, "fire");
                     } else if (this.specialPower === "ice") {
-                        gameScene.shootProjectile(this, enemy, damage, "ice"); // Example slow
+                        gameScene.shootProjectile(this, enemy.x, enemy.y, damage, "ice");
                     } else {
-                        gameScene.shootProjectile(this, enemy, damage); // No special effect
+                        gameScene.shootProjectile(this, enemy.x, enemy.y, damage, this.towerData.projectileType); // Use tower's projectile type
                     }
                 });
                 this.lastShotTime = currentTime;
             }
-        } else {
-            // Logic for other tower types (normal-tower, sniper-tower)
-            const nearestEnemy = gameScene.getEnemies().reduce((nearest: Phaser.Physics.Arcade.Sprite | null, enemy: Phaser.Physics.Arcade.Sprite) => {
-                const distance = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
-                if (distance < this.getCurrentRange() && (!nearest || distance < Phaser.Math.Distance.Between(this.x, this.y, nearest.x, nearest.y))) { // Use current range
-                    return enemy;
-                }
-                return nearest;
-            }, null);
-
-            if (nearestEnemy && currentTime - this.lastShotTime >= this.getCurrentShootCooldown()) {
-                // Use projectileSettings.damage instead of this.getCurrentDamage()
-                const damage = projectileSettings.damage;
-
-                // Pass special effect to shootProjectile
-                if (this.specialPower === "fire") {
-                    gameScene.shootProjectile(this, nearestEnemy, damage, "fire"); // Example burn damage
-                } else if (this.specialPower === "ice") {
-                    gameScene.shootProjectile(this, nearestEnemy, damage, "ice"); // Example slow
-                } else if (this.specialPower === "critical") {
-                    gameScene.shootProjectile(this, nearestEnemy, damage, "critical"); // Example critical hit
-                }
-                else {
-                    gameScene.shootProjectile(this, nearestEnemy, damage); // No special effect
-                }
-                this.lastShotTime = currentTime;
-            }
         }
+    }
+
+
+    private handleSingleTargetTowerShooting(currentTime: number, gameScene: GameScene, projectileType: string) {
+        const nearestEnemy = this.findNearestEnemy(gameScene);
+        if (nearestEnemy && currentTime - this.lastShotTime >= this.getCurrentShootCooldown()) {
+            const distance = Phaser.Math.Distance.Between(this.x, this.y, nearestEnemy.x, nearestEnemy.y);
+            const projectileSpeed = 400; // Must match shootProjectile speed
+            const timeToReach = distance / projectileSpeed;
+
+            // Null check for nearestEnemy.body
+            const enemyVelocity = nearestEnemy.body ? nearestEnemy.body.velocity : { x: 0, y: 0 };
+            const targetX = nearestEnemy.x + enemyVelocity.x * timeToReach;
+            const targetY = nearestEnemy.y + enemyVelocity.y * timeToReach;
+            const damage = this.getCurrentDamage();
+
+            // Use special power if available, otherwise use tower's default, otherwise use 'normal'
+            const finalProjectileType = this.specialPower || projectileType;
+            gameScene.shootProjectile(this, targetX, targetY, damage, finalProjectileType);
+            this.lastShotTime = currentTime;
+        }
+    }
+
+    private findNearestEnemy(gameScene: GameScene): Phaser.Physics.Arcade.Sprite | null {
+        const enemies = gameScene.getEnemies().filter(enemy => enemy.active && enemy instanceof Enemy);
+        if (enemies.length === 0) return null;
+        return enemies.reduce((nearest: Phaser.Physics.Arcade.Sprite | null, enemy) => {
+            const distance = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
+            if (distance < this.getCurrentRange() && (!nearest || distance < Phaser.Math.Distance.Between(this.x, this.y, nearest.x, nearest.y))) {
+                return enemy;
+            }
+            return nearest;
+        }, null);
     }
 
     takeDamage(damage: number) {
@@ -340,5 +354,4 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     getId(): string {
         return `tower_${this.towerType}_${this.x}_${this.y}`;
     }
-
 } 

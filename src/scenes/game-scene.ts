@@ -8,19 +8,24 @@ import Enemy from "../entities/enemy";
 import { GAME_SETTINGS, TowerType } from "../settings";
 import PowerUp, { PowerUpType } from "../entities/power-up";
 import { DifficultyLevel, DIFFICULTY_SETTINGS } from "../settings";
-import EnemyFactory from "../factory/enemy-factory";
-import TileMapManager from "../utils/tile-map-manager";
-import ItemDropManager from "../utils/item-drop-manager";
+import EntityFactory from "../factories/entity-factory";
+import TileMapManager from "../managers/tile-map-manager";
+import ItemDropManager from "../managers/item-drop-manager";
 import { GameItem, InventorySlot } from "../types/item";
-import InventoryManager from "../utils/inventory-manager";
-import { EnemyType } from "../types/enemy-type";
 import InventoryUI from "../ui/inventory-ui";
+import CameraController from "../utils/camera-controller";
+import { BaseScene } from "./base-scene";
+import { EventBus } from "../utils/event-bus";
+import { InputManager } from "../managers/input-manger";
+import { ResearchTree } from "../ui/hud";
+import { EnemyType } from "../types/enemy-type";
+import { gameConfig } from "../utils/app-config";
 
 type SceneInitData = {
     isNewGame: boolean;
 };
 
-export default class GameScene extends Phaser.Scene {
+export default class GameScene extends BaseScene {
     private gameState!: GameState;
     private user!: Player;
     private base!: Base;
@@ -34,85 +39,41 @@ export default class GameScene extends Phaser.Scene {
     private currentRound: number = 0;
     private gameOverHandled = false;
     private isRoundEnding: boolean = false;
+    private isRoundActive: boolean = false;
+    private debugMode: boolean = false;
     private selectedTower: Tower | null = null;
     private upgradePanel: Phaser.GameObjects.Container | null = null;
     private rangeCircle: Phaser.GameObjects.Graphics | null = null;
     private powerUpSpawnTimer: Phaser.Time.TimerEvent | null = null;
     private difficultyLevel: DifficultyLevel = DifficultyLevel.Medium;
-    private enemyFactory!: EnemyFactory;
+    private entityFactory!: EntityFactory;
     private tileMapManager!: TileMapManager;
     private itemDropManager!: ItemDropManager;
     private inventoryUI!: InventoryUI;
     private isInventoryVisible: boolean = false;
+    private cameraController!: CameraController;
+    public eventBus = new EventBus();
+    private inputManager: InputManager;
+    private spawnEnemy!: () => void;
+    private debugGraphics!: Phaser.GameObjects.Graphics;
+    private debugSettings = GAME_SETTINGS.debug;
+    private debugText!: Phaser.GameObjects.Text;
+    private physicsDebugGraphic!: Phaser.GameObjects.Graphics;
 
     constructor() {
         super({ key: "GameScene" });
+        this.inputManager = new InputManager(this, {
+            pause: "P",
+            inventory: "I",
+            debug: "F3"
+        });
+        this.inputManager.onAction("pause", () => this.togglePause());
+        this.inputManager.onAction("inventory", () => this.toggleInventoryUI());
+        this.inputManager.onAction("debug", () => this.toggleDebugMode());
     }
 
     preload() {
-        // Load assets
-        this.load.svg("user", "/assets/user.svg");
-        this.load.svg("base", "/assets/base.svg");
-        Object.entries(GAME_SETTINGS.towers).forEach(([key, data]) => {
-            this.load.svg(key, `/assets/${data.texture}.svg`);
-        });
-        this.load.svg("projectile", "/assets/projectile.svg");
-        this.load.svg("enemy", "/assets/enemy.svg");
-
-        // Load tileset images
-        this.load.svg('terrain-tiles', '/assets/terrain-tiles.svg');
-
-        // Add error handler for texture loading
-        this.load.on('loaderror', (fileObj: any) => {
-            console.error('Error loading asset:', fileObj.key);
-        });
-
-        // Add completion handler to verify loaded textures
-        this.load.on('complete', () => {
-            console.log('All assets loaded successfully');
-            
-            // Check if item textures loaded correctly
-            const itemTextures = [
-                'resource-small', 'resource-medium', 'resource-large',
-                'health-small', 'health-medium', 'health-large',
-                'weapon-blaster', 'weapon-rapid', 'weapon-cannon'
-            ];
-            
-            itemTextures.forEach(texture => {
-                const textureExists = this.textures.exists(texture);
-                console.log(`Texture ${texture}: ${textureExists ? 'Loaded' : 'MISSING'}`);
-            });
-        });
-
-        // Load item assets
-        this.load.svg('resource-small', '/assets/items/resource-small.svg');
-        this.load.svg('resource-medium', '/assets/items/resource-medium.svg');
-        this.load.svg('resource-large', '/assets/items/resource-large.svg');
-        
-        this.load.svg('health-small', '/assets/items/health-small.svg');
-        this.load.svg('health-medium', '/assets/items/health-medium.svg');
-        this.load.svg('health-large', '/assets/items/health-large.svg');
-        
-        this.load.svg('weapon-blaster', '/assets/items/weapon-blaster.svg');
-        this.load.svg('weapon-rapid', '/assets/items/weapon-rapid.svg');
-        this.load.svg('weapon-cannon', '/assets/items/weapon-cannon.svg');
-        
-        this.load.svg('blueprint-normal', '/assets/items/blueprint-normal.svg');
-        this.load.svg('blueprint-sniper', '/assets/items/blueprint-sniper.svg');
-        this.load.svg('blueprint-area', '/assets/items/blueprint-area.svg');
-        
-        this.load.svg('upgrade-tower-damage', '/assets/items/upgrade-tower-damage.svg');
-        this.load.svg('upgrade-player-speed', '/assets/items/upgrade-player-speed.svg');
-        this.load.svg('upgrade-base-armor', '/assets/items/upgrade-base-armor.svg');
-        
-        // Load UI assets
-        this.load.svg('inventory-slot', '/assets/ui/inventory-slot.svg');
-        this.load.svg('inventory-bg', '/assets/ui/inventory-bg.svg');
-        
-        // Load additional assets for decorations, etc.
-        this.load.svg('bush', '/assets/decorations/bush.svg');
-        this.load.svg('tree', '/assets/decorations/tree.svg');
-        // More decoration assets...
+        this.loadAssets();
     }
 
     init(data: SceneInitData) {
@@ -121,112 +82,165 @@ export default class GameScene extends Phaser.Scene {
             this.gameState.loadFromLocalStorage();
         }
         this.currentRound = 0;
-        // Emit event to show UI
         this.game.events.emit('start-game');
 
-        // Initialize power-up timer
         this.initPowerUpTimer();
     }
 
+
     create() {
-        // Create game objects
-        this.add.rectangle(0, 0, 800, 600, 0x333333).setOrigin(0);
+        this.setupPhysics();
+        this.setupCamera();
 
-        // Initialize tile map before creating entities
+        // Setup debug text
+        this.debugText = this.add.text(10, 10, '', { fontSize: '16px', color: '#ffffff' });
+
+        // Setup physics debug graphic and hide by default
+        this.physicsDebugGraphic = this.physics.world.createDebugGraphic();
+        this.physicsDebugGraphic.setVisible(false);
+
+        this.debugGraphics = this.add.graphics();
+        console.log('[GameScene] Scene created, available textures:', this.textures.getTextureKeys());
+
+        Object.entries(GAME_SETTINGS).forEach(([key, value]) => {
+            gameConfig.loadConfig(key as keyof typeof GAME_SETTINGS, value);
+        });
+
+        this.entityFactory = new EntityFactory(this);
         this.tileMapManager = new TileMapManager(this);
+        this.projectiles = this.physics.add.group();
+        this.towers = this.physics.add.group();
+        this.enemies = this.physics.add.group();
 
-        // Place decorations randomly
         this.placeDecorativeTiles();
 
-        // Create base at a specific tile position
         const basePos = this.tileMapManager.tileToWorld(
             Math.floor(GAME_SETTINGS.map.width / 2),
             Math.floor(GAME_SETTINGS.map.height / 2)
         );
-        this.base = new Base(this, basePos.x, basePos.y);
+        this.base = this.entityFactory.createBase(basePos.x, basePos.y);
 
-        // Place player at a valid position near the base
         const playerStart = this.findValidStartPosition();
-        this.user = new Player(this, playerStart.x, playerStart.y);
+        this.user = this.entityFactory.createPlayer(playerStart.x, playerStart.y);
+        this.cameras.main.startFollow(this.user);
+        this.cameraController = new CameraController(this, this.user);
 
-        // Set up physics groups
-        this.enemies = this.physics.add.group();
-        this.towers = this.physics.add.group({ immovable: true }); // Towers are static
-        this.projectiles = this.physics.add.group();
-
-        // Initialize item drop manager
         this.itemDropManager = new ItemDropManager(this, this.tileMapManager);
 
-        // Initialize inventory UI (initially hidden)
         this.inventoryUI = new InventoryUI(this, this.user.getInventory());
-        this.inventoryUI.hide(); // Start hidden
+        this.inventoryUI.hide();
 
-        // Initialize HUD
         this.hud = new HUD(this);
 
-        // Set up input handlers
         this.setupInputHandlers();
-
-        // Set up collisions
         this.setupCollisions();
+        this.setupProjectileCollisions();
 
-        // Add timer for enemy target recalculation
         this.time.addEvent({
             delay: GAME_SETTINGS.game.enemyTargetRecalculationInterval,
-            callback: () => {
-                this.recalculateEnemyTargets();
-            },
+            callback: () => this.recalculateEnemyTargets(),
             loop: true
         });
 
-        // Initialize enemy factory
-        this.enemyFactory = new EnemyFactory(this);
+        this.spawnEnemy = () => {
+            if (this.isRoundEnding || this.gameOverHandled) return;
 
-        // Set up camera to follow player
-        this.cameras.main.startFollow(this.user, true);
+            const enemyType = this.chooseEnemyType();
+            const tier = Math.min(this.currentRound + 1, 5);
+            const startPos = this.findValidStartPosition();
+
+            if (!startPos) {
+                console.warn("[GameScene] No valid start position found for enemy.");
+                return;
+            }
+
+            const onEnemyDeath = () => {
+                if (this.isRoundEnding || this.gameOverHandled) return;
+                this.eventBus.emit('enemy-killed', startPos.x, startPos.y);
+            };
+
+            const enemy = this.entityFactory.createEnemy(startPos.x, startPos.y, enemyType, tier, onEnemyDeath);
+            if (enemy) {
+                this.enemies?.add(enemy);
+                enemy.setData('target', this.base);
+            }
+        };
+
+        this.eventBus.on('enemy-killed', (x: number, y: number) => {
+            if (Math.random() < GAME_SETTINGS.itemDropChance) {
+                this.itemDropManager.dropRandomItem(x, y);
+            }
+        });
+
+        this.applyResearchEffects();
     }
 
-    // Helper to find valid starting position near the base
-    private findValidStartPosition() {
-        const baseTile = this.tileMapManager.worldToTile(this.base.x, this.base.y);
 
-        // Search for a valid spot in a spiral pattern from the base
-        for (let radius = 1; radius < 20; radius++) {
-            for (let dx = -radius; dx <= radius; dx++) {
-                for (let dy = -radius; dy <= radius; dy++) {
-                    // Only check the perimeter of the current radius
-                    if (Math.abs(dx) === radius || Math.abs(dy) === radius) {
-                        const tileX = baseTile.tileX + dx;
-                        const tileY = baseTile.tileY + dy;
+    private applyResearchEffects() {
+        const researchTree = ResearchTree.getInstance();
+        const towerDamageLevel = researchTree.getResearchLevel('tower-damage-1');
+        if (towerDamageLevel > 0) {
+            console.log(`Applying tower damage research level: ${towerDamageLevel}`);
+        }
+    }
 
-                        if (this.tileMapManager.isTileAvailable(tileX, tileY, 1, 1)) {
-                            return this.tileMapManager.tileToWorld(tileX, tileY);
-                        }
-                    }
-                }
-            }
+    private findValidStartPosition(): { x: number, y: number } {
+        // Get map dimensions from tile manager
+        const mapWidth = this.tileMapManager.getMapWidth() || 100; // Default to 100 if undefined
+        const mapHeight = this.tileMapManager.getMapHeight() || 100; // Default to 100 if undefined
+
+        // Randomly choose an edge (0 = top, 1 = right, 2 = bottom, 3 = left)
+        const edge = Phaser.Math.Between(0, 3);
+
+        let tileX: number;
+        let tileY: number;
+        const margin = 2; // Keep a small margin from the absolute edge
+
+        switch (edge) {
+            case 0: // Top edge
+                tileX = Phaser.Math.Between(margin, mapWidth - margin);
+                tileY = margin;
+                break;
+            case 1: // Right edge
+                tileX = mapWidth - margin;
+                tileY = Phaser.Math.Between(margin, mapHeight - margin);
+                break;
+            case 2: // Bottom edge
+                tileX = Phaser.Math.Between(margin, mapWidth - margin);
+                tileY = mapHeight - margin;
+                break;
+            case 3: // Left edge
+                tileX = margin;
+                tileY = Phaser.Math.Between(margin, mapHeight - margin);
+                break;
+            default:
+                // Fallback to a safe position if something goes wrong
+                tileX = margin;
+                tileY = margin;
         }
 
-        // Fallback position if no valid spot found
-        return this.tileMapManager.tileToWorld(baseTile.tileX + 5, baseTile.tileY);
+        // Make sure position is not occupied
+        if (!this.tileMapManager.isTileAvailable(tileX, tileY, 1, 1)) {
+            // If position isn't available, try again with recursive call
+            // (with a limit to prevent infinite recursion)
+            return this.findValidStartPosition();
+        }
+
+        // Convert tile position to world position
+        return this.tileMapManager.tileToWorld(tileX, tileY);
     }
 
-    // Place decorative elements on the map
     private placeDecorativeTiles() {
-        // Place a certain number of decorations randomly
         for (let i = 0; i < GAME_SETTINGS.map.decorationCount; i++) {
             const decorType = Phaser.Math.RND.pick(['bush', 'tree', 'rock']);
-            const decorSize = decorType === 'tree' ? 2 : 1; // Trees take up more tiles
+            const decorSize = decorType === 'tree' ? 2 : 1;
 
-            // Find valid placement
             const position = this.tileMapManager.findValidPlacement(decorSize, decorSize);
             if (position) {
                 const worldPos = this.tileMapManager.tileToWorld(position.tileX, position.tileY);
 
-                // Create decoration sprite
-                const decoration = this.add.image(worldPos.x, worldPos.y, decorType);
+                this.add.image(worldPos.x, worldPos.y, decorType);
 
-                // Mark tiles as occupied
                 this.tileMapManager.occupyTiles(
                     position.tileX, position.tileY,
                     decorSize, decorSize,
@@ -236,24 +250,38 @@ export default class GameScene extends Phaser.Scene {
         }
     }
 
-    // Add method to get the tile map manager
     public getTileMapManager(): TileMapManager {
         return this.tileMapManager;
     }
 
-    // Update placeTower method to use tile coordinates
     enterBuildMode(towerType: TowerType) {
         if (this.isBuildModeActive) return;
 
         const towerData = GAME_SETTINGS.towers[towerType];
         if (!towerData) {
             console.log('Invalid tower type selected');
+            this.exitBuildMode();
             return;
         }
 
         if (!this.gameState.canAfford(towerData.price)) {
-            console.log('Not enough resources to select this tower');
-            this.exitBuildMode();  // Ensure build mode exits if already active, or cannot afford
+            // Show visual feedback for insufficient resources
+            const text = this.add.text(
+                this.cameras.main.worldView.centerX,
+                this.cameras.main.worldView.centerY - 50,
+                'Not enough resources!',
+                { fontSize: '24px', color: '#ff0000' }
+            ).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: text,
+                alpha: 0,
+                y: text.y - 50,
+                duration: 1000,
+                onComplete: () => text.destroy()
+            });
+
+            this.exitBuildMode();
             return;
         }
 
@@ -264,72 +292,138 @@ export default class GameScene extends Phaser.Scene {
             this.ghostTower.destroy();
         }
 
-        // Get tower size in tiles
-        const towerData2 = GAME_SETTINGS.towers[towerType];
-        const towerWidth = towerData2.size.width;
-        const towerHeight = towerData2.size.height;
+        // Create ghost tower with proper sizing
+        this.ghostTower = this.add.sprite(0, 0, towerType)
+            .setAlpha(0.5)
+            .setScale(towerData.scale);
 
-        // Create ghost tower for placement preview
-        this.ghostTower = this.add.sprite(0, 0, towerType).setAlpha(0.5);
+        // Add a range indicator circle
+        const rangeCircle = this.add.graphics();
+        rangeCircle.lineStyle(2, 0xffffff, 0.5);
+        rangeCircle.strokeCircle(0, 0, towerData.range);
+        this.ghostTower.setData('rangeCircle', rangeCircle);
 
-        // Update ghost tower position and validation on pointer move
+        // Add grid indicator
+        const gridIndicator = this.add.graphics();
+        this.ghostTower.setData('gridIndicator', gridIndicator);
+
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
             if (this.ghostTower) {
                 const tilePos = this.tileMapManager.worldToTile(pointer.worldX, pointer.worldY);
                 const worldPos = this.tileMapManager.tileToWorld(tilePos.tileX, tilePos.tileY);
 
                 this.ghostTower.setPosition(worldPos.x, worldPos.y);
+                const rangeCircle = this.ghostTower.getData('rangeCircle') as Phaser.GameObjects.Graphics;
+                rangeCircle.setPosition(worldPos.x, worldPos.y);
 
-                // Check if placement is valid
+                // Update grid indicator
+                const gridIndicator = this.ghostTower.getData('gridIndicator') as Phaser.GameObjects.Graphics;
+                gridIndicator.clear();
+                gridIndicator.lineStyle(2, 0xffffff, 0.3);
+
+                const tileSize = this.tileMapManager.getTileSize();
+                const width = towerData.size.width * tileSize;
+                const height = towerData.size.height * tileSize;
+
+                // Draw grid
+                for (let x = 0; x <= width; x += tileSize) {
+                    gridIndicator.lineBetween(
+                        worldPos.x - width / 2 + x,
+                        worldPos.y - height / 2,
+                        worldPos.x - width / 2 + x,
+                        worldPos.y + height / 2
+                    );
+                }
+                for (let y = 0; y <= height; y += tileSize) {
+                    gridIndicator.lineBetween(
+                        worldPos.x - width / 2,
+                        worldPos.y - height / 2 + y,
+                        worldPos.x + width / 2,
+                        worldPos.y - height / 2 + y
+                    );
+                }
+
                 const isValid = this.tileMapManager.isTileAvailable(
                     tilePos.tileX, tilePos.tileY,
-                    towerWidth, towerHeight
+                    towerData.size.width, towerData.size.height
                 );
 
-                // Visual feedback for valid/invalid placement
-                this.ghostTower.setTint(isValid ? 0xffffff : 0xff0000);
+                // Update visuals based on validity
+                this.ghostTower.setTint(isValid ? 0x00ff00 : 0xff0000);
+                rangeCircle.setVisible(isValid);
+                gridIndicator.setVisible(isValid);
+
+                // Show cost indicator
+                if (!this.ghostTower.getData('costText')) {
+                    const costText = this.add.text(0, 0, `Cost: ${towerData.price}`, {
+                        fontSize: '16px',
+                        color: '#ffffff',
+                        backgroundColor: '#000000',
+                        padding: { x: 4, y: 2 }
+                    }).setOrigin(0.5);
+                    this.ghostTower.setData('costText', costText);
+                }
+
+                const costText = this.ghostTower.getData('costText') as Phaser.GameObjects.Text;
+                costText.setPosition(worldPos.x, worldPos.y - height / 2 - 20);
             }
         });
-    }
 
-    private placeTower(x: number, y: number) {
-        if (!this.selectedTowerType || !this.towers) return;
+        // Show build mode instructions
+        const instructions = this.add.text(
+            this.cameras.main.worldView.centerX,
+            50,
+            'Left-click to place tower\nRight-click or ESC to cancel',
+            {
+                fontSize: '20px',
+                color: '#ffffff',
+                backgroundColor: '#000000',
+                padding: { x: 10, y: 5 }
+            }
+        ).setOrigin(0.5);
+        this.ghostTower.setData('instructions', instructions);
 
-        const towerData = GAME_SETTINGS.towers[this.selectedTowerType];
-        if (!towerData || !this.gameState.spendResources(towerData.price)) {
-            console.log(`Failed to place ${this.selectedTowerType}: Insufficient resources`);
-            this.exitBuildMode();
-            return;
-        }
-
-        // Convert world coordinates to tile coordinates
-        const tilePos = this.tileMapManager.worldToTile(x, y);
-
-        // Check if placement is valid
-        if (!this.tileMapManager.isTileAvailable(
-            tilePos.tileX, tilePos.tileY,
-            towerData.size.width, towerData.size.height
-        )) {
-            console.log(`Cannot place tower at this location. Tiles are occupied.`);
-            return;
-        }
-
-        // Create tower with tile coordinates
-        const tower = new Tower(this, tilePos.tileX, tilePos.tileY, this.selectedTowerType);
-        this.towers.add(tower, true);
-
-        console.log(`Placed ${this.selectedTowerType}. Resources remaining: ${this.gameState.getResources()}`);
-        this.hud.updateResources();
-        this.exitBuildMode();
+        // Add right-click and ESC to cancel
+        const cancelBuild = () => this.exitBuildMode();
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            if (pointer.rightButtonDown()) {
+                cancelBuild();
+            }
+        });
+        this.input.keyboard?.addKey('ESC').on('down', cancelBuild);
     }
 
     private exitBuildMode() {
         this.isBuildModeActive = false;
         this.selectedTowerType = null;
+
         if (this.ghostTower) {
+            const rangeCircle = this.ghostTower.getData('rangeCircle') as Phaser.GameObjects.Graphics;
+            if (rangeCircle) {
+                rangeCircle.destroy();
+            }
+
+            const gridIndicator = this.ghostTower.getData('gridIndicator') as Phaser.GameObjects.Graphics;
+            if (gridIndicator) {
+                gridIndicator.destroy();
+            }
+
+            const costText = this.ghostTower.getData('costText') as Phaser.GameObjects.Text;
+            if (costText) {
+                costText.destroy();
+            }
+
+            const instructions = this.ghostTower.getData('instructions') as Phaser.GameObjects.Text;
+            if (instructions) {
+                instructions.destroy();
+            }
+
             this.ghostTower.destroy();
             this.ghostTower = null;
         }
+
+        this.input.off('pointermove');
+        this.input.keyboard?.removeKey('ESC');
     }
 
     public findNearestTower(x: number, y: number, range: number): Phaser.Physics.Arcade.Sprite | null {
@@ -350,10 +444,9 @@ export default class GameScene extends Phaser.Scene {
     }
 
     private onProjectileHitEnemy(projectile: Phaser.Physics.Arcade.Sprite, enemy: Phaser.Physics.Arcade.Sprite) {
-        const damage = projectile.getData('damage') || 20; // Default to 20 if not set
+        const damage = projectile.getData('damage') || 20;
         (enemy as Enemy).takeDamage(damage);
 
-        // Apply special effects
         const specialEffect = projectile.getData('specialEffect');
         if (specialEffect) {
             if (specialEffect.type === 'fire') {
@@ -378,43 +471,39 @@ export default class GameScene extends Phaser.Scene {
             this.upgradePanel.destroy();
         }
 
-        this.upgradePanel = this.add.container(150, 100); // Adjusted position for visibility
+        this.upgradePanel = this.add.container(150, 100);
 
-        // Background with rounded corners and semi-transparency
         const bg = this.add.graphics();
         bg.fillStyle(0x000000, 0.8);
-        bg.fillRoundedRect(0, 0, 250, 400, 10); // Increased height for tier upgrade option
+        bg.fillRoundedRect(0, 0, 250, 400, 10);
         this.upgradePanel.add(bg);
 
-        // Title
         const title = this.add.text(125, 20, `Upgrade Tower (Tier ${tower.getTier()})`, {
             fontSize: '20px',
             color: '#ffffff'
         }).setOrigin(0.5);
         this.upgradePanel.add(title);
 
-        // Tier upgrade option (placed at the top)
         if (tower.getTier() < tower.getMaxTier()) {
             const tierCost = tower.getTierUpgradeCost();
             const tierButton = this.add.text(20, 50, `Upgrade to Tier ${tower.getTier() + 1} - ${tierCost}`, {
                 fontSize: '16px',
-                color: '#ffa500' // Orange for tier upgrades
+                color: '#ffa500'
             }).setWordWrapWidth(210);
-            
+
             tierButton.setInteractive();
             tierButton.on('pointerdown', () => this.tierUpgradeTower(tower));
             tierButton.on('pointerover', () => tierButton.setStyle({ color: '#ffff00' }));
             tierButton.on('pointerout', () => tierButton.setStyle({ color: '#ffa500' }));
-            
+
             if (!this.gameState.canAfford(tierCost)) {
                 tierButton.setStyle({ color: '#888888' });
                 tierButton.disableInteractive();
             }
-            
+
             this.upgradePanel.add(tierButton);
         }
 
-        // Upgrade options
         const upgrades: { type: "speed" | "range" | "damage"; label: string }[] = [
             { type: 'speed', label: 'Speed' },
             { type: 'range', label: 'Range' },
@@ -422,10 +511,9 @@ export default class GameScene extends Phaser.Scene {
         ];
 
         upgrades.forEach((upgrade, index) => {
-            const yPos = 90 + index * 40; // Adjusted position to make room for tier upgrade
-            // Get the appropriate level based on the upgrade type
+            const yPos = 90 + index * 40;
             let level = 0;
-            switch(upgrade.type) {
+            switch (upgrade.type) {
                 case 'speed': level = tower.getSpeedLevel(); break;
                 case 'range': level = tower.getRangeLevel(); break;
                 case 'damage': level = tower.getDamageLevel(); break;
@@ -436,9 +524,8 @@ export default class GameScene extends Phaser.Scene {
             const button = this.add.text(20, yPos, buttonText, {
                 fontSize: '16px',
                 color: '#ffffff'
-            }).setWordWrapWidth(210); // Wrap text within panel width
+            }).setWordWrapWidth(210);
             button.setInteractive();
-            // Call upgradeTower with the correct type
             button.on('pointerdown', () => this.upgradeTower(tower, upgrade.type));
             button.on('pointerover', () => button.setStyle({ color: '#ffff00' }));
             button.on('pointerout', () => button.setStyle({ color: '#ffffff' }));
@@ -450,7 +537,6 @@ export default class GameScene extends Phaser.Scene {
             this.upgradePanel?.add(button);
         });
 
-        // Special powers (if none selected)
         if (!tower.getSpecialPower()) {
             const specialPowers: { type: "fire" | "ice" | "critical"; label: string; color: string; }[] = [
                 { type: 'fire', label: 'Fire', color: '#ff0000' },
@@ -459,13 +545,12 @@ export default class GameScene extends Phaser.Scene {
             ];
 
             specialPowers.forEach((power, index) => {
-                const yPos = 210 + index * 30; // Adjusted position
+                const yPos = 210 + index * 30;
                 const button = this.add.text(20, yPos, `${power.label} - 500`, {
                     fontSize: '16px',
                     color: power.color
                 });
                 button.setInteractive();
-                // Call purchaseSpecialPower with the correct type
                 button.on('pointerdown', () => this.purchaseSpecialPower(tower, power.type));
                 button.on('pointerover', () => button.setStyle({ color: '#ffffff' }));
                 button.on('pointerout', () => button.setStyle({ color: power.color }));
@@ -474,19 +559,18 @@ export default class GameScene extends Phaser.Scene {
                     button.setStyle({ color: '#888888' });
                     button.disableInteractive();
                 }
-                if (this.upgradePanel) { // Check if upgradePanel is null before adding
+                if (this.upgradePanel) {
                     this.upgradePanel.add(button);
                 }
             });
         }
 
-        // Add tower stats display
         const yPos = 300;
-        const statsText = this.add.text(20, yPos, 
+        const statsText = this.add.text(20, yPos,
             `Damage: ${Math.round(tower.getCurrentDamage())}\n` +
             `Range: ${Math.round(tower.getCurrentRange())}\n` +
             `Speed: ${(1000 / tower.getShootCooldown()).toFixed(1)} shots/sec\n` +
-            `Health: ${tower.getHealth()}/${tower.getMaxHealth()}`, 
+            `Health: ${tower.getHealth()}/${tower.getMaxHealth()}`,
             {
                 fontSize: '14px',
                 color: '#ffffff'
@@ -494,7 +578,6 @@ export default class GameScene extends Phaser.Scene {
         );
         this.upgradePanel.add(statsText);
 
-        // Close button
         const closeButton = this.add.text(230, 10, 'X', {
             fontSize: '16px',
             color: '#ff0000'
@@ -509,7 +592,6 @@ export default class GameScene extends Phaser.Scene {
             this.upgradePanel.add(closeButton);
         }
 
-        // Simple animation
         this.upgradePanel.setScale(0.9);
         this.tweens.add({
             targets: this.upgradePanel,
@@ -519,18 +601,15 @@ export default class GameScene extends Phaser.Scene {
         });
     }
 
-    // Method to handle tier upgrades for towers
     private tierUpgradeTower(tower: Tower) {
         const cost = tower.getTierUpgradeCost();
-        
+
         if (this.gameState.canAfford(cost)) {
             if (this.gameState.spendResources(cost)) {
                 tower.upgradeTier();
-                
-                // Update the upgrade panel to reflect the new tier
+
                 this.showUpgradePanel(tower);
-                
-                // Visual effect for tier upgrade
+
                 const particles = this.add.particles(tower.x, tower.y, 'projectile', {
                     speed: 100,
                     scale: { start: 1, end: 0 },
@@ -538,13 +617,10 @@ export default class GameScene extends Phaser.Scene {
                     lifespan: 1000,
                     gravityY: -50
                 });
-                
+
                 this.time.delayedCall(1000, () => {
                     particles.destroy();
                 });
-                
-                // Play sound (commented out for now)
-                // this.sound.play('tower-upgrade');
             }
         }
     }
@@ -555,7 +631,7 @@ export default class GameScene extends Phaser.Scene {
             this.gameState.spendResources(cost);
             tower.upgrade(upgradeType);
             this.hud.updateResources();
-            this.showUpgradePanel(tower); // Refresh the panel to update costs/levels
+            this.showUpgradePanel(tower);
             this.hud.updateTowerStats(tower);
         }
     }
@@ -565,7 +641,7 @@ export default class GameScene extends Phaser.Scene {
             this.gameState.spendResources(tower.getSpecialPowerCost());
             tower.setSpecialPower(powerType);
             this.hud.updateResources();
-            this.showUpgradePanel(tower); // Refresh panel
+            this.showUpgradePanel(tower);
             this.hud.updateTowerStats(tower);
         }
     }
@@ -588,33 +664,51 @@ export default class GameScene extends Phaser.Scene {
 
     getEnemies(): Phaser.Physics.Arcade.Sprite[] {
         if (!this.enemies) return [];
-        return this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[];
+
+        // Filter to only return active enemies, ensuring they are Enemy instances
+        return this.enemies.getChildren().filter(obj => {
+            return obj.active && obj instanceof Enemy;
+        }) as Phaser.Physics.Arcade.Sprite[];
     }
 
     public recalculateEnemyTargets() {
         if (!this.enemies || !this.towers) return;
 
-        const towersLeft = this.towers.countActive(true);
+        const towersActive = this.towers.countActive(true);
 
         this.enemies.getChildren().forEach((obj) => {
-            const enemy = obj as Phaser.Physics.Arcade.Sprite;
+            const enemy = obj as Enemy;
             if (!enemy.active) return;
 
-            const distToUser = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.user.x, this.user.y);
             let newTarget: Phaser.Physics.Arcade.Sprite | null = null;
 
+            // Check if player is very close (top priority for close range)
+            const distToUser = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.user.x, this.user.y);
             if (distToUser < 100) {
                 newTarget = this.user;
-            } else {
-                if (towersLeft > 0) {
-                    const nearestTower = this.findNearestTower(enemy.x, enemy.y, Infinity);
-                    newTarget = nearestTower || (this.base.active ? this.base : null); // Fallback to base if no tower
-                } else {
-                    newTarget = this.base.active ? this.base : null; // Always target base when no towers left, and check if base is active
+            }
+            // Priority 1: Target towers if any exist
+            else if (towersActive > 0) {
+                const nearestTower = this.findNearestTower(enemy.x, enemy.y, Infinity);
+                if (nearestTower) {
+                    const distToTower = Phaser.Math.Distance.Between(enemy.x, enemy.y, nearestTower.x, nearestTower.y);
+                    if (distToTower < 500) { // Only target towers within reasonable range
+                        newTarget = nearestTower;
+                    }
                 }
             }
 
+            // Priority 2: Target base if no towers in range
+            if (!newTarget && this.base.active) {
+                newTarget = this.base;
+            }
+
             enemy.setData("target", newTarget);
+
+            // Update debug visuals if debug mode is on
+            if (this.debugMode) {
+                this.showDebugInfo();
+            }
         });
     }
 
@@ -660,7 +754,7 @@ export default class GameScene extends Phaser.Scene {
             this.rangeCircle.destroy();
         }
         this.rangeCircle = this.add.graphics();
-        this.rangeCircle.lineStyle(2, 0xffffff, 0.5); // White, semi-transparent
+        this.rangeCircle.lineStyle(2, 0xffffff, 0.5);
         this.rangeCircle.strokeCircle(tower.x, tower.y, tower.getCurrentRange());
     }
 
@@ -681,10 +775,9 @@ export default class GameScene extends Phaser.Scene {
         return this.selectedTower;
     }
 
-    // Initialize power-up timer
     private initPowerUpTimer() {
         this.powerUpSpawnTimer = this.time.addEvent({
-            delay: 60000, // Spawn every 60 seconds
+            delay: 60000,
             callback: this.spawnRandomPowerUp,
             callbackScope: this,
             loop: true
@@ -692,14 +785,11 @@ export default class GameScene extends Phaser.Scene {
     }
 
     private spawnRandomPowerUp() {
-        // Only spawn during combat phase
         if (this.isRoundEnding) return;
 
-        // Choose a random power-up type
         const powerUpTypes = Object.values(PowerUpType);
         const randomType = Phaser.Math.RND.pick(powerUpTypes);
 
-        // Find a valid spawn position that's visible to the player
         const camera = this.cameras.main;
         let spawnX = Phaser.Math.Between(
             camera.scrollX + 100,
@@ -710,15 +800,12 @@ export default class GameScene extends Phaser.Scene {
             camera.scrollY + camera.height - 100
         );
 
-        // Create the power-up with the correct type 
-        // Use local PowerUpType to avoid type conflicts
-        const powerUp = new PowerUp(this, spawnX, spawnY, randomType as PowerUpType);
+        new PowerUp(this, spawnX, spawnY, randomType as PowerUpType);
 
-        // Simple visual effect instead of using particles
         const flashEffect = this.add.sprite(spawnX, spawnY, 'projectile')
             .setScale(2)
             .setTint(0xffffff);
-        
+
         this.tweens.add({
             targets: flashEffect,
             alpha: 0,
@@ -728,22 +815,17 @@ export default class GameScene extends Phaser.Scene {
         });
     }
 
-    // Add method to set difficulty
     public setDifficulty(level: DifficultyLevel) {
         this.difficultyLevel = level;
     }
 
-    // Add method to get the item drop manager
     public getItemDropManager(): ItemDropManager {
         return this.itemDropManager;
     }
 
-    /**
-     * Toggle inventory UI visibility
-     */
     public toggleInventoryUI(): void {
         this.isInventoryVisible = !this.isInventoryVisible;
-        
+
         if (this.isInventoryVisible) {
             this.inventoryUI.show();
         } else {
@@ -751,110 +833,8 @@ export default class GameScene extends Phaser.Scene {
         }
     }
 
-    /**
-     * Shoot a projectile from a source to a target
-     * @param source The entity shooting
-     * @param target The target entity
-     * @param damage Amount of damage the projectile does
-     * @param projectileType Type of projectile to use (visual and behavior)
-     */
-    public shootProjectile(
-        source: Phaser.Physics.Arcade.Sprite,
-        target: Phaser.Physics.Arcade.Sprite,
-        damage: number,
-        projectileType: string = 'normal'
-    ): void {
-        if (!this.projectiles) return;
-
-        // Create projectile at source position - FIXED: Use physics.add.sprite instead of just add.sprite
-        const projectile = this.physics.add.sprite(source.x, source.y, 'projectile');
-        this.projectiles.add(projectile);
-
-        // Set projectile to be visible and active (debug fix for rendering issues)
-        projectile.setVisible(true);
-        projectile.setActive(true);
-
-        // Set data needed for damage calculations
-        projectile.setData('damage', damage);
-        projectile.setData('source', source);
-        projectile.setData('type', projectileType);
-
-        // Apply visual effects based on projectile type
-        switch (projectileType) {
-            case 'player':
-                projectile.setTint(0x00ff00); // Green for player projectiles
-                break;
-            case 'player-rapid':
-                projectile.setTint(0x00ffff); // Cyan for rapid projectiles
-                projectile.setScale(0.6); // Smaller projectiles
-                break;
-            case 'player-power':
-                projectile.setTint(0xff0000); // Red for power projectiles
-                projectile.setScale(1.5); // Larger projectiles
-                break;
-            case 'normal':
-                // Default color
-                break;
-            case 'sniper':
-                projectile.setTint(0x0000ff); // Blue for sniper
-                projectile.setScale(0.7);
-                break;
-            case 'area':
-                projectile.setTint(0xff00ff); // Purple for area
-                projectile.setScale(1.2);
-                break;
-        }
-
-        // Calculate velocity toward target
-        const angle = Phaser.Math.Angle.Between(source.x, source.y, target.x, target.y);
-        
-        // Get the appropriate speed from settings - fix type access
-        let speed = GAME_SETTINGS.projectiles.speed;
-        if (projectileType in GAME_SETTINGS.projectiles) {
-            const projectileConfig = GAME_SETTINGS.projectiles[projectileType as keyof typeof GAME_SETTINGS.projectiles];
-            if (typeof projectileConfig === 'object' && 'speed' in projectileConfig) {
-                speed = (projectileConfig as any).speed;
-            }
-        }
-        
-        // Set projectile properties
-        projectile.setRotation(angle);
-        
-        // Check if body exists before setting velocity
-        if (projectile.body) {
-            // Use proper physics body setup
-            this.physics.velocityFromRotation(
-                angle, 
-                speed, 
-                (projectile.body as Phaser.Physics.Arcade.Body).velocity
-            );
-        } else {
-            // Fallback method if body isn't ready yet
-            console.warn('Projectile body not initialized, using direct velocity');
-            const velocityX = Math.cos(angle) * speed;
-            const velocityY = Math.sin(angle) * speed;
-            projectile.setVelocity(velocityX, velocityY);
-        }
-
-        // Log for debugging
-        console.log(`Projectile created at (${source.x}, ${source.y}) with angle ${angle}`);
-
-        // Destroy projectile after a certain time if it doesn't hit anything
-        this.time.delayedCall(3000, () => {
-            if (projectile.active) {
-                projectile.destroy();
-            }
-        });
-    }
-
-    /**
-     * Add an item to the player's inventory (used by entities like towers when giving items to player)
-     * @param item Item to add to inventory
-     * @returns Whether the item was successfully added
-     */
     public addItemToInventory(item: GameItem): boolean {
-        if (!this.user || !this.user.active) return false;
-        return this.user.addItemToInventory(item);
+        return this.user.getInventory().addItem(item);
     }
 
     public getDifficultyLevel(): DifficultyLevel {
@@ -862,14 +842,10 @@ export default class GameScene extends Phaser.Scene {
     }
 
     private setupInputHandlers(): void {
-        // Player input is handled in Player class
-        
-        // Add input for toggling inventory
         this.input.keyboard?.addKey('I').on('down', () => {
             this.toggleInventoryUI();
         });
-        
-        // Add input for game pause
+
         this.input.keyboard?.addKey('P').on('down', () => {
             if (this.scene.isPaused()) {
                 this.scene.resume();
@@ -877,14 +853,13 @@ export default class GameScene extends Phaser.Scene {
                 this.scene.pause();
             }
         });
-        
-        // Clicking anywhere exits build mode unless clicking on a tower
+
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (this.isBuildModeActive) {
                 if (this.ghostTower) {
                     const tilePos = this.tileMapManager.worldToTile(pointer.worldX, pointer.worldY);
                     const towerData = GAME_SETTINGS.towers[this.selectedTowerType as TowerType];
-                    
+
                     if (this.tileMapManager.isTileAvailable(
                         tilePos.tileX, tilePos.tileY,
                         towerData.size.width, towerData.size.height
@@ -894,11 +869,10 @@ export default class GameScene extends Phaser.Scene {
                 }
                 return;
             }
-            
-            // Check if clicked on a tower
+
             const worldPoint = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
             const clickedTower = this.findTowerAt(worldPoint.x, worldPoint.y);
-            
+
             if (clickedTower) {
                 this.selectTower(clickedTower);
             } else {
@@ -909,8 +883,7 @@ export default class GameScene extends Phaser.Scene {
 
     private setupCollisions(): void {
         if (!this.enemies || !this.towers || !this.projectiles) return;
-        
-        // Projectiles hit enemies
+
         this.physics.add.collider(
             this.projectiles,
             this.enemies,
@@ -921,88 +894,96 @@ export default class GameScene extends Phaser.Scene {
             undefined,
             this
         );
-        
-        // Enemies attack base when they reach it
+
         this.physics.add.overlap(
             this.enemies,
             this.base,
-            (enemy, base) => {
-                (enemy as Phaser.Physics.Arcade.Sprite).destroy();
-                (base as Base).takeDamage(10);
+            (enemyObj, baseObj) => {
+                if (enemyObj instanceof Enemy && baseObj instanceof Base) {
+                    if (enemyObj.active && baseObj.active) {
+                        const lastDamageTime = enemyObj.getData('lastDamageTime') || 0;
+                        const currentTime = this.time.now;
+                        if (currentTime - lastDamageTime >= 1000) { // Damage every 1 second
+                            baseObj.takeDamage(2); // Reduced damage
+                            enemyObj.setData('lastDamageTime', currentTime);
+                        }
+                    }
+                }
             },
-            undefined,
+            (enemyObj, baseObj) => {
+                return enemyObj instanceof Phaser.Physics.Arcade.Sprite &&
+                       baseObj instanceof Phaser.Physics.Arcade.Sprite &&
+                       enemyObj.active && baseObj.active;
+            },
             this
         );
-        
-        // Collisions between enemies and player
+
         this.physics.add.overlap(
             this.enemies,
             this.user,
             (enemyObj, playerObj) => {
-                const enemy = enemyObj as Phaser.Physics.Arcade.Sprite;
-                const player = playerObj as Player;
-                
-                // Deal damage to player - FIXED: Direct call instead of getData
-                player.takeDamage(5);
-                
-                // Knockback effect
-                const angle = Phaser.Math.Angle.Between(
-                    enemy.x, 
-                    enemy.y,
-                    player.x, 
-                    player.y
-                );
-                const knockbackForce = 200;
-                player.setVelocity(
-                    Math.cos(angle) * knockbackForce,
-                    Math.sin(angle) * knockbackForce
-                );
+                if (enemyObj instanceof Enemy && playerObj instanceof Player) {
+                    if (enemyObj.active && playerObj.active && !enemyObj.getData('hasDealtDamage')) {
+                        playerObj.takeDamage(5);
+                        const angle = Phaser.Math.Angle.Between(enemyObj.x, enemyObj.y, playerObj.x, playerObj.y);
+                        const knockbackForce = 200;
+                        playerObj.setVelocity(Math.cos(angle) * knockbackForce, Math.sin(angle) * knockbackForce);
+                        enemyObj.setData('hasDealtDamage', true);
+                        enemyObj.setActive(false);
+                        this.time.delayedCall(0, () => enemyObj.destroy());
+                    }
+                }
             },
-            undefined,
+            (enemyObj, playerObj) => {
+                return enemyObj instanceof Phaser.Physics.Arcade.Sprite &&
+                       playerObj instanceof Phaser.Physics.Arcade.Sprite &&
+                       enemyObj.active && playerObj.active && !enemyObj.getData('hasDealtDamage');
+            },
             this
         );
+
     }
 
     private updateEnemies(): void {
         if (!this.enemies) return;
-        
+
         this.enemies.getChildren().forEach(gameObj => {
             const enemy = gameObj as Phaser.Physics.Arcade.Sprite;
-            if (!enemy.active) return;
-            
+            if (!enemy || !enemy.active) return;
+
             const target = enemy.getData('target') as Phaser.Physics.Arcade.Sprite | null;
-            
+
             if (!target || !target.active) {
-                // Target destroyed, find a new one
                 this.recalculateEnemyTargets();
                 return;
             }
-            
-            // Move towards target
+
             const targetX = target.x;
             const targetY = target.y;
             const angle = Phaser.Math.Angle.Between(
-                enemy.x, 
-                enemy.y, 
-                targetX, 
+                enemy.x,
+                enemy.y,
+                targetX,
                 targetY
             );
-            
-            // Get enemy speed from its data
-            const speed = enemy.getData('speed') || GAME_SETTINGS.enemies.speed;
-            
+
+            const enemyType = enemy.getData('type') as EnemyType || this.chooseEnemyType();
+            const defaultSpeed = GAME_SETTINGS.enemies[enemyType]?.speed || 100;
+            const speed = enemy.getData('speed') || defaultSpeed;
+
             const body = enemy.body as Phaser.Physics.Arcade.Body;
-            this.physics.velocityFromRotation(angle, speed, body.velocity);
-            
-            // Rotate to face target
-            enemy.rotation = angle;
-            
-            // Attack if in range
+            if (body) {
+                this.physics.velocityFromRotation(angle, speed, body.velocity);
+                enemy.rotation = angle;
+            }
+
             const distance = Phaser.Math.Distance.Between(enemy.x, enemy.y, targetX, targetY);
             const attackRange = enemy.getData('attackRange') || 20;
-            
+
             if (distance <= attackRange) {
-                enemy.setVelocity(0, 0);
+                if (body) {
+                    body.setVelocity(0, 0);
+                }
                 const attackFunc = enemy.getData('attack');
                 if (attackFunc && typeof attackFunc === 'function') {
                     attackFunc(target);
@@ -1011,138 +992,68 @@ export default class GameScene extends Phaser.Scene {
         });
     }
 
-    // Add this method to find tower at specific coordinates
     private findTowerAt(x: number, y: number): Tower | null {
         if (!this.towers) return null;
-        
+
         let result: Tower | null = null;
-        
+
         (this.towers.getChildren() as Phaser.Physics.Arcade.Sprite[]).forEach(sprite => {
             const tower = sprite as Tower;
             const distance = Phaser.Math.Distance.Between(x, y, tower.x, tower.y);
-            
-            // Use tower size for hit test
+
             const towerType = tower.getTowerType();
             const towerData = GAME_SETTINGS.towers[towerType];
-            // Use a safer property access for getTileSize
-            const tileSize = this.tileMapManager?.getTileSize ? 
+            const tileSize = this.tileMapManager?.getTileSize ?
                 this.tileMapManager.getTileSize() : GAME_SETTINGS.map.tileSize || 32;
             const hitSize = Math.max(towerData.size.width, towerData.size.height) * tileSize / 2;
-            
+
             if (distance < hitSize) {
                 result = tower;
             }
         });
-        
+
         return result;
     }
 
-    // Add start round methods
     public startRound(): void {
         if (this.isRoundEnding) return;
-        
+
+        this.isRoundActive = true;
         this.currentRound++;
         console.log(`Starting round ${this.currentRound}`);
-        
-        // Disable build buttons during combat
+
         this.hud.updateResources();
-        
-        // Define enemies for this round based on difficulty
+
         const diffSettings = DIFFICULTY_SETTINGS[this.difficultyLevel];
         const enemyCount = Math.floor(5 + this.currentRound * 1.5 * diffSettings.enemyCountMultiplier);
-        // Use default spawn rate if spawnRateMultiplier is not defined
         const spawnRateMultiplier = (diffSettings as any).spawnRateMultiplier || 1.0;
         const spawnDelay = Math.floor(Math.max(300, 1000 - this.currentRound * 50) * spawnRateMultiplier);
-        
-        // Spawn enemies
+
         let delay = 0;
-        
+
         for (let i = 0; i < enemyCount; i++) {
             this.time.addEvent({
                 delay: delay,
                 callback: this.spawnEnemy,
                 callbackScope: this
             });
-            
+
             delay += spawnDelay;
         }
-        
-        // Check for round completion
+
         this.time.addEvent({
-            delay: delay + 5000, // Give extra time for last enemies to be killed
+            delay: delay + 5000,
             callback: this.checkRoundCompletion,
             callbackScope: this,
             loop: true
         });
     }
 
-    private spawnEnemy(): void {
-        if (!this.enemies) return;
-        
-        // Choose random enemy type based on current round
-        let enemyTypes = [EnemyType.Normal];
-        if (this.currentRound >= 3) enemyTypes.push(EnemyType.Fast);
-        if (this.currentRound >= 5) enemyTypes.push(EnemyType.Heavy);
-        if (this.currentRound >= 10 && this.currentRound % 5 === 0) enemyTypes.push(EnemyType.Boss);
-        if (this.currentRound >= 7) enemyTypes.push(EnemyType.Flying);
-        
-        const enemyType = Phaser.Math.RND.pick(enemyTypes);
-        
-        // Find a valid spawn location at the edge of the map
-        // Use a safer property access for getTileSize
-        const tileSize = this.tileMapManager?.getTileSize ? 
-            this.tileMapManager.getTileSize() : GAME_SETTINGS.map.tileSize || 32;
-        const mapWidth = GAME_SETTINGS.map.width * tileSize;
-        const mapHeight = GAME_SETTINGS.map.height * tileSize;
-        
-        // Choose a random edge to spawn from
-        const edge = Phaser.Math.Between(0, 3);
-        let x = 0;
-        let y = 0;
-        
-        switch (edge) {
-            case 0: // Top edge
-                x = Phaser.Math.Between(0, mapWidth);
-                y = 0;
-                break;
-            case 1: // Right edge
-                x = mapWidth;
-                y = Phaser.Math.Between(0, mapHeight);
-                break;
-            case 2: // Bottom edge
-                x = Phaser.Math.Between(0, mapWidth);
-                y = mapHeight;
-                break;
-            case 3: // Left edge
-                x = 0;
-                y = Phaser.Math.Between(0, mapHeight);
-                break;
-        }
-        
-        // Spawn the enemy - fixed parameters to match EnemyFactory.createEnemy
-        const healthMultiplier = 1 + (this.currentRound - 1) * 0.2;
-        const speedMultiplier = 1 + (this.currentRound - 1) * 0.05;
-        
-        // Fix the parameter types to match the EnemyFactory interface
-        const enemy = this.enemyFactory.createEnemy(
-            enemyType,
-            x,
-            y,
-            healthMultiplier,
-            speedMultiplier
-        );
-        
-        this.enemies.add(enemy);
-        
-        // Set initial target
-        enemy.setData('target', this.base);
-    }
-
     private checkRoundCompletion(): void {
         if (!this.enemies || this.isRoundEnding) return;
-        
+
         const activeEnemies = this.enemies.countActive();
-        
+
         if (activeEnemies === 0) {
             this.endRound();
         }
@@ -1150,12 +1061,11 @@ export default class GameScene extends Phaser.Scene {
 
     private endRound(): void {
         this.isRoundEnding = true;
-        
-        // Award resources for completing the round
+        this.isRoundActive = false;
+
         const roundBonus = this.currentRound * 20 + 50;
         this.gameState.earnResources(roundBonus);
-        
-        // Show message
+
         const roundCompleteText = this.add.text(
             this.cameras.main.worldView.centerX,
             this.cameras.main.worldView.centerY - 50,
@@ -1163,7 +1073,7 @@ export default class GameScene extends Phaser.Scene {
             { fontSize: '32px', color: '#ffffff' }
         );
         roundCompleteText.setOrigin(0.5);
-        
+
         const bonusText = this.add.text(
             this.cameras.main.worldView.centerX,
             this.cameras.main.worldView.centerY,
@@ -1171,8 +1081,7 @@ export default class GameScene extends Phaser.Scene {
             { fontSize: '24px', color: '#ffff00' }
         );
         bonusText.setOrigin(0.5);
-        
-        // Fade out text after a delay
+
         this.time.delayedCall(2000, () => {
             this.tweens.add({
                 targets: [roundCompleteText, bonusText],
@@ -1184,69 +1093,48 @@ export default class GameScene extends Phaser.Scene {
                 }
             });
         });
-        
-        // Heal player
+
         const healAmount = 20;
         this.user.heal(healAmount);
-        
-        // Show next round button
+
         this.hud.showNextRoundButton(() => {
             this.isRoundEnding = false;
         });
-        
-        // Update HUD
+
         this.hud.updateResources();
     }
 
-    // Add inventory-related methods for HUD compatibility
     public getInventory(): InventorySlot[] {
-        if (this.user) {
-            // Access the inventory manager correctly
-            const inventory = this.user.getInventory();
-            // Filter out any null values
-            return inventory.getInventory().filter((slot): slot is InventorySlot => slot !== null);
-        }
-        return [];
+        return this.user.getInventory().getInventory().filter((slot): slot is InventorySlot => slot !== null);
     }
 
-    public equipItem(item: any): void {
-        // The real implementation would use proper typing
-        if (this.user) {
-            this.user.equipItem(item);
-        }
+    public equipItem(item: GameItem): void {
+        this.user.equipItem(item);
+        this.eventBus.emit('update-inventory');
+        this.hud.updatePlayerStats();
     }
 
-    public unequipItem(item: any): void {
-        // This would be implemented properly with the actual inventory system
-        console.log("Unequipping item:", item);
+    public unequipItem(slot: string): void {
+        this.user.unequipItem(slot);
+        this.eventBus.emit('update-inventory');
+        this.hud.updatePlayerStats();
     }
 
-    // Add getter for HUD
     public getHUD(): HUD {
         return this.hud;
     }
-    
-    // Add getDifficulty method for HUD compatibility
+
     public getDifficulty(): string {
-        // Return the current difficulty as a string
-        // You might want to modify this to return a more specific value
         return this.difficultyLevel.toString();
     }
 
-    /**
-     * Main update loop called by Phaser every frame
-     * This is required to update all game entities
-     */
-    update(time: number, delta: number) {
-        // Update the player (should happen automatically through the scene system)
+    update() {
         if (this.user && this.user.active) {
             this.user.update();
         }
 
-        // Update all enemies
         this.updateEnemies();
 
-        // Update active enemies to ensure they run their own internal update logic
         if (this.enemies) {
             this.enemies.getChildren().forEach(enemy => {
                 if (enemy.active && enemy instanceof Enemy) {
@@ -1255,7 +1143,6 @@ export default class GameScene extends Phaser.Scene {
             });
         }
 
-        // Update tower actions like shooting
         if (this.towers) {
             this.towers.getChildren().forEach(tower => {
                 if (tower.active && tower instanceof Tower) {
@@ -1264,14 +1151,360 @@ export default class GameScene extends Phaser.Scene {
             });
         }
 
-        // Update dropped items
         if (this.itemDropManager) {
             this.itemDropManager.update();
         }
 
-        // Update HUD if game is still active
         if (this.hud && !this.gameOverHandled) {
             this.hud.updateResources();
         }
+
+        this.inputManager.update();
+
+        this.cameraController.update();
+
+        // Update debug info if enabled
+        if (this.debugMode && this.debugSettings.enabled) {
+            let debugInfo = '';
+            if (this.debugSettings.showFPS) {
+                debugInfo += `FPS: ${Math.round(this.game.loop.actualFps)}\n`;
+            }
+            if (this.debugSettings.showInput) {
+                const pointer = this.input.activePointer;
+                debugInfo += `Mouse: ${pointer.x.toFixed(0)}, ${pointer.y.toFixed(0)}\n`;
+            }
+            this.debugText.setText(debugInfo);
+
+            this.showDebugInfo();
+        } else {
+            this.debugText.setText('');
+        }
+    }
+
+    private togglePause(): void {
+        if (this.scene.isPaused()) {
+            this.scene.resume();
+        } else {
+            this.scene.pause();
+        }
+    }
+
+    private chooseEnemyType(): EnemyType {
+        const types = Object.values(EnemyType);
+        return Phaser.Math.RND.pick(types) as EnemyType;
+    }
+
+    public toggleDebugMode() {
+        this.debugMode = !this.debugMode;
+
+        if (this.debugGraphics) {
+            this.debugGraphics.clear();
+        }
+
+        // Toggle physics debug visibility
+        if (this.physicsDebugGraphic) {
+            this.physicsDebugGraphic.setVisible(this.debugMode && this.debugSettings.showPhysics);
+        }
+
+        if (this.debugMode) {
+            this.showDebugInfo();
+        }
+    }
+
+    private showDebugInfo() {
+        if (!this.debugMode || !this.debugSettings.enabled || !this.debugGraphics) return;
+
+        this.debugGraphics.clear();
+
+        // Draw base range
+        this.debugGraphics.lineStyle(2, 0x00ff00, 0.5);
+        this.debugGraphics.strokeCircle(this.base.x, this.base.y, 200);
+
+        // Draw enemy paths if enabled
+        if (this.debugSettings.showPaths && this.enemies) {
+            this.enemies.getChildren().forEach((obj) => {
+                const enemy = obj as Enemy;
+                if (!enemy.active) return;
+
+                const target = enemy.getData('target') as Phaser.Physics.Arcade.Sprite;
+                if (!target) return;
+
+                this.debugGraphics.lineStyle(2, 0xff0000, 0.5);
+                this.debugGraphics.lineBetween(enemy.x, enemy.y, target.x, target.y);
+            });
+        }
+
+        // Draw tower ranges if enabled
+        if (this.debugSettings.showRanges && this.towers) {
+            this.towers.getChildren().forEach((obj) => {
+                const tower = obj as Tower;
+                if (!tower.active) return;
+
+                this.debugGraphics.lineStyle(2, 0x0000ff, 0.3);
+                this.debugGraphics.strokeCircle(tower.x, tower.y, tower.getCurrentRange());
+            });
+        }
+    }
+
+    private placeTower(x: number, y: number) {
+        if (!this.selectedTowerType || !this.towers) return;
+
+        const towerData = GAME_SETTINGS.towers[this.selectedTowerType];
+        if (!towerData) {
+            console.error(`[GameScene] Failed to get tower data for type: ${this.selectedTowerType}`);
+            this.exitBuildMode();
+            return;
+        }
+
+        if (!this.gameState.spendResources(towerData.price)) {
+            // Show visual feedback for insufficient resources
+            const text = this.add.text(
+                this.cameras.main.worldView.centerX,
+                this.cameras.main.worldView.centerY - 50,
+                'Not enough resources!',
+                { fontSize: '24px', color: '#ff0000' }
+            ).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: text,
+                alpha: 0,
+                y: text.y - 50,
+                duration: 1000,
+                onComplete: () => text.destroy()
+            });
+
+            this.exitBuildMode();
+            return;
+        }
+
+        const tilePos = this.tileMapManager.worldToTile(x, y);
+        const worldPos = this.tileMapManager.tileToWorld(tilePos.tileX, tilePos.tileY);
+
+        if (!this.tileMapManager.isTileAvailable(
+            tilePos.tileX, tilePos.tileY,
+            towerData.size.width, towerData.size.height
+        )) {
+            // Show visual feedback for invalid placement
+            const text = this.add.text(
+                worldPos.x,
+                worldPos.y - 20,
+                'Invalid placement!',
+                { fontSize: '20px', color: '#ff0000' }
+            ).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: text,
+                alpha: 0,
+                y: text.y - 30,
+                duration: 1000,
+                onComplete: () => text.destroy()
+            });
+            return;
+        }
+
+        const tower = new Tower(this, tilePos.tileX, tilePos.tileY, this.selectedTowerType);
+        this.towers.add(tower, true);
+
+        // Show placement success effect
+        const flash = this.add.graphics();
+        flash.lineStyle(2, 0x00ff00, 1);
+        flash.strokeCircle(worldPos.x, worldPos.y, towerData.range);
+
+        this.tweens.add({
+            targets: flash,
+            alpha: 0,
+            duration: 500,
+            onComplete: () => flash.destroy()
+        });
+
+        // Show resources spent
+        const costText = this.add.text(
+            worldPos.x,
+            worldPos.y - 40,
+            `-${towerData.price}`,
+            { fontSize: '20px', color: '#ff0000' }
+        ).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: costText,
+            alpha: 0,
+            y: costText.y - 30,
+            duration: 1000,
+            onComplete: () => costText.destroy()
+        });
+
+        this.hud.updateResources();
+        this.exitBuildMode();
+
+        // If debug mode is on, update the debug visuals
+        if (this.debugMode) {
+            this.showDebugInfo();
+        }
+    }
+
+    public createProjectile(x: number, y: number, texture: string): Phaser.Physics.Arcade.Sprite {
+        if (!this.projectiles) {
+            console.error("Projectiles group not initialized");
+            this.projectiles = this.physics.add.group();
+        }
+
+        // Create the projectile sprite
+        const projectile = this.physics.add.sprite(x, y, texture);
+        this.projectiles.add(projectile);
+
+        // Set the origin to 0.5, 0.5 to make rotation work properly around the center
+        projectile.setOrigin(0.5, 0.5);
+
+        // Store the base values we'll need for consistent scaling
+        const BASE_RADIUS = 65; // Use your known working value
+        projectile.setData('baseRadius', BASE_RADIUS);
+
+        // Initial hitbox setup
+        projectile.body.setCircle(BASE_RADIUS);
+
+        projectile.setActive(true);
+        projectile.setVisible(true);
+        return projectile;
+    }
+
+    /** Shoots a projectile toward specified coordinates with properly scaled hitbox */
+    public shootProjectile(
+        source: Phaser.Physics.Arcade.Sprite,
+        targetX: number,
+        targetY: number,
+        damage: number,
+        projectileType: string = 'normal'
+    ): void {
+
+        console.log({
+            source,
+            targetX,
+            targetY,
+            damage,
+            projectileType
+        })
+        if (!this.projectiles) return;
+
+        const projectile = this.createProjectile(source.x, source.y, 'projectile');
+        projectile.setData('damage', damage);
+        projectile.setData('source', source);
+        projectile.setData('type', projectileType);
+
+        // Apply visual settings based on projectile type
+        let scale = 0.5;
+
+        switch (projectileType) {
+            case 'player':
+                projectile.setTint(0x00ff00);
+                break;
+            case 'player-rapid':
+                projectile.setTint(0x00ffff);
+                scale = 0.6;
+                break;
+            case 'player-power':
+                projectile.setTint(0xff0000);
+                scale = 1.5;
+                break;
+            case 'sniper':
+                projectile.setTint(0x0000ff);
+                scale = 0.7;
+                break;
+            case 'area':
+                projectile.setTint(0xff00ff);
+                scale = 1.2;
+                break;
+            case 'fire':
+                projectile.setTint(0xff6600);
+                break;
+            case 'ice':
+                projectile.setTint(0x66ffff);
+                break;
+            case 'critical':
+                projectile.setTint(0xffff00);
+                break;
+        }
+
+        // Apply scale if needed
+        if (scale !== 1.0) {
+            projectile.setScale(scale);
+
+            // Get the base radius we stored
+            const baseRadius = projectile.getData('baseRadius');
+
+            // Calculate new radius proportionally to the scale
+            const newRadius = Math.round(baseRadius * scale);
+
+            // Reset the physics body with the new radius
+            projectile?.body?.setCircle(newRadius);
+        }
+
+        const angle = Phaser.Math.Angle.Between(source.x, source.y, targetX, targetY);
+        projectile.setRotation(angle);
+
+        const speed = 400; // Keep consistent speed
+        if (projectile.body) {
+            this.physics.velocityFromRotation(angle, speed, projectile.body.velocity);
+        }
+
+        // Set timeout to destroy projectile after 3 seconds
+        this.time.delayedCall(3000, () => {
+            if (projectile.active) projectile.destroy();
+        });
+    }
+
+    /** Sets up projectile-enemy collisions with proper hitbox handling */
+    private setupProjectileCollisions(): void {
+        if (!this.projectiles || !this.enemies) return;
+
+        this.physics.add.collider(
+            this.projectiles,
+            this.enemies,
+            (projectileObj, enemyObj) => {
+                if (!(projectileObj instanceof Phaser.Physics.Arcade.Sprite) || !(enemyObj instanceof Enemy)) return;
+                const projectile = projectileObj;
+                const enemy = enemyObj;
+
+                if (!projectile.active || !enemy.active) return;
+
+                const damage = projectile.getData('damage') || 10;
+                enemy.takeDamage(damage);
+
+                // Apply special effects if any
+                const specialEffect = projectile.getData('specialEffect');
+                if (specialEffect) {
+                    if (specialEffect.type === 'fire') {
+                        enemy.applyBurnEffect(specialEffect.params.burnDamage);
+                    } else if (specialEffect.type === 'ice') {
+                        enemy.applySlowEffect(specialEffect.params.slowFactor, specialEffect.params.duration);
+                    }
+                }
+
+                // Destroy projectile after hit
+                projectile.destroy();
+            },
+            (projectileObj, enemyObj) => {
+                return projectileObj instanceof Phaser.Physics.Arcade.Sprite &&
+                       enemyObj instanceof Phaser.Physics.Arcade.Sprite &&
+                       projectileObj.active && enemyObj.active
+            },
+            this
+        );
+    }
+
+    public showPickupMessage(message: string): void {
+        const text = this.add.text(
+            this.cameras.main.worldView.centerX,
+            this.cameras.main.worldView.centerY - 50,
+            message,
+            { fontSize: '24px', color: '#ffffff' }
+        ).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: text,
+            alpha: 0,
+            y: text.y - 50,
+            duration: 1000,
+            onComplete: () => text.destroy()
+        });
     }
 }

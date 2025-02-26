@@ -2,20 +2,13 @@ import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 import { HealthBar } from "../utils/health-bar";
 import { GameItem } from "../types/item";
+import Player from "./player";
+import { HealthComponent } from "../utils/health-component";
+import { CrateType, CrateContents } from "../types/crate-types";
 
-export enum CrateType {
-    Wood = 'wood',
-    Metal = 'metal',
-    Gold = 'gold'
-}
-
-export interface CrateContents {
-    resources?: number;
-    items?: GameItem[];
-}
 
 export default class Crate extends Phaser.Physics.Arcade.Sprite {
-    private health: number;
+    private healthComponent: HealthComponent;
     private maxHealth: number;
     private healthBar: HealthBar;
     private crateType: CrateType;
@@ -25,62 +18,68 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
     private broken: boolean = false;
 
     constructor(
-        scene: GameScene, 
-        tileX: number, 
-        tileY: number, 
-        type: CrateType = CrateType.Wood,
+        scene: GameScene,
+        tileX: number,
+        tileY: number,
+        type: CrateType,
         health: number = 50,
         contents: CrateContents = { resources: 50 }
     ) {
-        // Get world position from tiles
         const tileMapManager = scene.getTileMapManager();
         const worldPos = tileMapManager.tileToWorld(tileX, tileY);
 
         super(scene, worldPos.x, worldPos.y, `crate-${type}`);
-        
+
         this.crateType = type;
         this.maxHealth = health;
-        this.health = health;
+        this.healthComponent = new HealthComponent(
+            this,
+            scene,
+            health,
+            health,
+            () => this.breakCrate()
+        );
         this.contents = contents;
         this.tileX = tileX;
         this.tileY = tileY;
 
         scene.add.existing(this);
         scene.physics.add.existing(this, true); // true = static body
-        
-        // Mark tile as occupied
+
         tileMapManager.occupyTiles(tileX, tileY, 1, 1, 'crate', `crate_${tileX}_${tileY}`);
-        
-        // Set appearance based on type
+
         this.setOrigin(0.5, 0.5);
         this.setScale(0.5);
-        
+
         switch (type) {
             case CrateType.Metal:
-                this.setTint(0x888888); // Gray tint for metal
+                this.setTint(0x888888);
                 break;
             case CrateType.Gold:
-                this.setTint(0xFFD700); // Gold tint
+                this.setTint(0xFFD700);
                 break;
             // Wood crate has default appearance
         }
-        
-        // Make crate clickable/interactive
+
         this.setInteractive();
-        
-        // Health bar
+
         this.healthBar = new HealthBar(scene, this, this.maxHealth);
+
+        this.on('pointerdown', this.handleCrateClick, this);
     }
-    
+
+    private handleCrateClick() {
+        this.breakCrate();
+    }
+
     /**
      * Damage the crate. If health reaches 0, the crate breaks and drops its contents.
      */
-    takeDamage(damage: number): void {
+    public takeDamage(damage: number): void {
         if (this.broken) return;
-        
-        this.health -= damage;
-        this.healthBar.updateHealth(this.health);
-        
+
+        this.healthComponent.takeDamage(damage);
+
         // Visual feedback
         this.scene.tweens.add({
             targets: this,
@@ -88,33 +87,35 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
             duration: 100,
             yoyo: true
         });
-        
-        if (this.health <= 0) {
+
+        if (this.healthComponent.getHealth() <= 0) {
             this.breakCrate();
         }
     }
-    
+
     /**
      * Break the crate and drop its contents
      */
     private breakCrate(): void {
         if (this.broken) return;
         this.broken = true;
-        
+
         const gameScene = this.scene as GameScene;
-        
+
+        const itemDropManager = gameScene.getItemDropManager();
+
         // Drop resources if any
         if (this.contents.resources) {
             gameScene.getGameState().earnResources(this.contents.resources);
-            
+
             // Show floating text for resources
             const resourceText = this.scene.add.text(
-                this.x, 
-                this.y - 20, 
-                `+${this.contents.resources}`, 
+                this.x,
+                this.y - 20,
+                `+${this.contents.resources}`,
                 { fontSize: '16px', color: '#ffff00' }
             );
-            
+
             this.scene.tweens.add({
                 targets: resourceText,
                 y: this.y - 50,
@@ -123,16 +124,14 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
                 onComplete: () => resourceText.destroy()
             });
         }
-        
+
         // Drop items if any
         if (this.contents.items && this.contents.items.length > 0) {
-            const itemDropManager = gameScene.getItemDropManager();
-            
-            this.contents.items.forEach(item => {
+            this.contents.items.forEach((item: GameItem) => {
                 itemDropManager.dropItem(item, this.x, this.y);
             });
         }
-        
+
         // Visual break effect
         const particles = this.scene.add.particles(this.x, this.y, 'projectile', {
             speed: { min: 50, max: 150 },
@@ -142,23 +141,32 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
             lifespan: 1000,
             quantity: 20
         });
-        
+
         this.scene.time.delayedCall(1000, () => {
             particles.destroy();
         });
-        
+
         // Free up the tile
         const tileMapManager = (this.scene as GameScene).getTileMapManager();
         tileMapManager.releaseTiles(this.tileX, this.tileY, 1, 1);
-        
+
         // Clean up and destroy
         this.healthBar.cleanup();
         this.destroy();
     }
-    
+
     // Method to force-break the crate (e.g., from a special weapon or ability)
-    forceBreak(): void {
-        this.health = 0;
+    public forceBreak(): void {
+        this.healthComponent.takeDamage(this.healthComponent.getHealth());
         this.breakCrate();
+    }
+
+    public openCrate(player: Player): void {
+        this.breakCrate();
+    }
+
+    destroy(fromScene?: boolean): void {
+        this.healthComponent.cleanup();
+        super.destroy(fromScene);
     }
 } 

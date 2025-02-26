@@ -115,7 +115,7 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
                 break;
             case PowerUpType.Resources:
                 gameScene.getGameState().earnResources(this.value);
-                gameScene.getHUD().updateResources();
+                // HUD listens via EventBus for resource updates
                 break;
         }
         
