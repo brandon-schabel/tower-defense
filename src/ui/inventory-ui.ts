@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import InventoryManager from '../managers/inventory-manager';
-import { GameItem, InventorySlot, ItemRarity } from '../types/item';
+import { GameItem, InventorySlot, ItemRarity, ItemType, HealthItem } from '../types/item';
 import { EventBus } from "../utils/event-bus";
 
 export default class InventoryUI {
@@ -17,6 +17,7 @@ export default class InventoryUI {
     } | null = null;
     private isVisible: boolean = false;
     private eventBus: EventBus;
+    private onDragMove: ((p: Phaser.Input.Pointer) => void) | null = null;
 
     // Constants for layout
     private readonly ROWS = 4;
@@ -137,76 +138,184 @@ export default class InventoryUI {
      * Set up drag and drop events for inventory slots
      */
     private setupSlotEvents(slotBg: Phaser.GameObjects.Rectangle, slotIndex: number): void {
-        // Pointer down on slot
-        slotBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        // Clear any existing event handlers to prevent duplicates
+        slotBg.removeAllListeners();
+        
+        // Add hover effect
+        slotBg.on('pointerover', () => {
+            slotBg.setFillStyle(0x555555); // Highlight color
+            
+            // Show tooltip for the item
             const inventoryData = this.inventoryManager.getInventory();
             const slotData = inventoryData[slotIndex];
-
-            // If slot has an item and we're not already dragging something
-            if (slotData && !this.draggedItem) {
-                // Create a sprite to drag
-                const sprite = this.scene.add.sprite(pointer.x, pointer.y, slotData.item.texture);
-                sprite.setScale(0.8);
-                sprite.setDepth(101);
-
-                // Add quantity text if stackable
-                let quantityText = null;
-                if (slotData.quantity > 1) {
-                    quantityText = this.scene.add.text(
-                        pointer.x + 15,
-                        pointer.y + 15,
-                        slotData.quantity.toString(),
-                        { fontSize: '16px', color: '#FFFFFF', stroke: '#000000', strokeThickness: 4 }
-                    );
-                    quantityText.setDepth(102);
-                }
-
-                // Store dragged item info
-                this.draggedItem = {
-                    item: slotData.item,
-                    quantity: slotData.quantity,
-                    originalSlot: slotIndex,
-                    sprite: sprite,
-                    quantityText: quantityText!
-                };
-
-                // Add tooltip with item details
+            
+            if (slotData) {
+                // Get pointer position
+                const pointer = this.scene.input.activePointer;
+                this.hideItemTooltip(); // Clear any existing tooltip
+                
+                // Show tooltip with item info and usage instructions
                 this.showItemTooltip(slotData.item, pointer.x, pointer.y - 80);
+                
+                // Add usage instructions based on item type
+                if (slotData.item.type === ItemType.HEALTH) {
+                    this.addTooltipInstruction("Click to use and heal");
+                } else if (slotData.item.type === ItemType.WEAPON) {
+                    this.addTooltipInstruction("Drag to equip");
+                } else if (slotData.item.type === ItemType.RESOURCE) {
+                    this.addTooltipInstruction("Used for crafting");
+                } else {
+                    this.addTooltipInstruction("Click or drag to use");
+                }
             }
         });
+        
+        slotBg.on('pointerout', () => {
+            slotBg.setFillStyle(0x333333); // Reset color
+            this.hideItemTooltip();
+        });
 
-        // Pointer up on slot (drop)
-        slotBg.on('pointerup', () => {
-            if (this.draggedItem) {
+        // Modified pointer down/up behavior to clearly separate clicks from drags
+        let dragStarted = false;
+        let dragThreshold = 5; // Pixels to move before considering it a drag
+        let startPosition = {x: 0, y: 0};
+        
+        slotBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            startPosition = {x: pointer.x, y: pointer.y};
+            dragStarted = false;
+            
+            const inventoryData = this.inventoryManager.getInventory();
+            const slotData = inventoryData[slotIndex];
+            
+            // If slot has an item and we're not already dragging something
+            if (slotData && !this.draggedItem) {
+                // Start tracking for potential drag
+                this.scene.input.on('pointermove', this.onDragMove = (p: Phaser.Input.Pointer) => {
+                    if (!dragStarted) {
+                        const distance = Phaser.Math.Distance.Between(
+                            startPosition.x, startPosition.y, p.x, p.y
+                        );
+                        
+                        if (distance > dragThreshold) {
+                            dragStarted = true;
+                            
+                            // Create visual for dragging
+                            const sprite = this.scene.add.sprite(p.x, p.y, slotData.item.texture);
+                            sprite.setScale(0.8);
+                            sprite.setDepth(101);
+                            
+                            // Add quantity text if stackable
+                            let quantityText = null;
+                            if (slotData.quantity > 1) {
+                                quantityText = this.scene.add.text(
+                                    p.x + 15, p.y + 15,
+                                    slotData.quantity.toString(),
+                                    { 
+                                        fontSize: '16px', 
+                                        color: '#FFFFFF', 
+                                        stroke: '#000000', 
+                                        strokeThickness: 4 
+                                    }
+                                );
+                                quantityText.setDepth(102);
+                            }
+                            
+                            // Store dragged item info
+                            this.draggedItem = {
+                                item: slotData.item,
+                                quantity: slotData.quantity,
+                                originalSlot: slotIndex,
+                                sprite: sprite,
+                                quantityText: quantityText!
+                            };
+                        }
+                    } else if (this.draggedItem) {
+                        // Update drag position
+                        this.draggedItem.sprite.setPosition(p.x, p.y);
+                        if (this.draggedItem.quantityText) {
+                            this.draggedItem.quantityText.setPosition(p.x + 15, p.y + 15);
+                        }
+                    }
+                });
+            }
+        });
+        
+        slotBg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+            // Clean up move listener
+            if (this.onDragMove) {
+                this.scene.input.off('pointermove', this.onDragMove);
+                this.onDragMove = null;
+            }
+            
+            // If we didn't start dragging, treat it as a click to use the item
+            if (!dragStarted && !this.draggedItem) {
+                const inventoryData = this.inventoryManager.getInventory();
+                const slotData = inventoryData[slotIndex];
+                
+                if (slotData) {
+                    // Use the item if it's a health item
+                    if (slotData.item.type === ItemType.HEALTH) {
+                        this.useItem(slotIndex);
+                    }
+                }
+            } 
+            // If we're dragging something and released over a slot
+            else if (this.draggedItem) {
                 // Handle item placement
                 this.inventoryManager.moveItem(
                     this.draggedItem.originalSlot,
                     slotIndex
                 );
-
+                
                 // Clean up drag visuals
                 this.cleanupDraggedItem();
+                
+                // Update inventory display
+                this.updateInventoryDisplay();
+            }
+            
+            // Reset flag
+            dragStarted = false;
+        });
+    }
 
-                // Hide tooltip
-                this.hideItemTooltip();
+    private addTooltipInstruction(text: string): void {
+        const tooltip = this.container?.getData('tooltip') as Phaser.GameObjects.Container;
+        if (!tooltip) return;
+        
+        // Find the last element to position after it
+        let maxY = 0;
+        tooltip.each((child: Phaser.GameObjects.GameObject) => {
+            // Skip the background
+            if (child instanceof Phaser.GameObjects.Rectangle) return;
+            
+            if (child instanceof Phaser.GameObjects.Text) {
+                const bottom = child.y + child.height;
+                if (bottom > maxY) maxY = bottom;
             }
         });
-
-        // Double click to use item
-        slotBg.on('pointerdown', (pointer: Phaser.Input.Pointer, _: number, __: number, event: Phaser.Types.Input.EventData) => {
-            // Use the event's current timestamp to detect double clicks 
-            const currentTime = this.scene.time.now;
-            if (currentTime - (slotBg.getData('lastClickTime') || 0) < 300) {
-                const inventoryData = this.inventoryManager.getInventory();
-                const slotData = inventoryData[slotIndex];
-
-                if (slotData) {
-                    // Double-clicked an item, try to use it
-                    this.useItem(slotIndex);
-                }
+        
+        // Add instruction text
+        const instruction = this.scene.add.text(
+            0, maxY + 10,
+            text,
+            { 
+                fontSize: '12px', 
+                color: '#ffff00', 
+                fontStyle: 'italic',
+                stroke: '#000000',
+                strokeThickness: 2
             }
-            slotBg.setData('lastClickTime', currentTime);
-        });
+        );
+        instruction.setOrigin(0.5, 0);
+        instruction.setName('instruction');
+        tooltip.add(instruction);
+        
+        // Resize background to fit
+        const bg = tooltip.getAt(0) as Phaser.GameObjects.Rectangle;
+        if (bg) {
+            bg.height = maxY + instruction.height + 20;
+        }
     }
 
     /**
@@ -218,11 +327,168 @@ export default class InventoryUI {
 
         if (!slotData) return;
 
-        // For now we just simulate item use by removing it from inventory
-        // In a complete implementation, this would trigger the appropriate 
-        // action based on item type and pass to the player entity
+        // Handle different item types
+        switch(slotData.item.type) {
+            case ItemType.HEALTH:
+                const healthItem = slotData.item as HealthItem;
+                if (healthItem.healAmount) {
+                    // First, try to remove the item before applying effects
+                    const removed = this.inventoryManager.removeItemFromSlot(slotIndex, 1);
+                    
+                    if (removed) {
+                        // Only proceed with healing if item was successfully removed
+                        console.log(`Using health item to heal for ${healthItem.healAmount}`);
+                        
+                        // Flash the slot with a healing color
+                        const slotContainer = this.slots[slotIndex];
+                        const slotBg = slotContainer.getAt(0) as Phaser.GameObjects.Rectangle;
+                        
+                        // Create a more noticeable heal effect
+                        this.scene.tweens.add({
+                            targets: slotBg,
+                            fillColor: { from: 0x00ff00, to: 0x333333 },
+                            alpha: { from: 1, to: 0.5 },
+                            yoyo: true,
+                            duration: 400,
+                            repeat: 1,
+                            onComplete: () => {
+                                slotBg.setFillStyle(0x333333);
+                                slotBg.setAlpha(1);
+                            }
+                        });
+                        
+                        // Emit the heal event with a slight delay to ensure visuals sync
+                        this.scene.time.delayedCall(200, () => {
+                            this.eventBus.emit('use-health-item', {
+                                amount: healthItem.healAmount,
+                                source: 'healthpack',
+                                timestamp: Date.now()
+                            });
+                        });
+                        
+                        // Show healing effect with improved visuals
+                        this.showHealingEffect(healthItem.healAmount);
+                        
+                        // Update the inventory display after a short delay
+                        this.scene.time.delayedCall(100, () => {
+                            this.updateInventoryDisplay();
+                        });
+                    } else {
+                        console.warn('Failed to remove health item from inventory');
+                        // Show error feedback
+                        const slotContainer = this.slots[slotIndex];
+                        const slotBg = slotContainer.getAt(0) as Phaser.GameObjects.Rectangle;
+                        
+                        this.scene.tweens.add({
+                            targets: slotBg,
+                            fillColor: 0xff0000,
+                            yoyo: true,
+                            duration: 200,
+                            onComplete: () => {
+                                slotBg.setFillStyle(0x333333);
+                            }
+                        });
+                    }
+                }
+                break;
+                
+            // Handle other item types as needed
+            default:
+                console.log(`Using item: ${slotData.item.name}`);
+                break;
+        }
+    }
 
-        this.inventoryManager.removeItemFromSlot(slotIndex, 1);
+    private showHealingEffect(amount: number): void {
+        const camera = this.scene.cameras.main;
+        const x = camera.width / 2;
+        const y = camera.height / 2;
+        
+        // Create multiple healing particles
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const radius = 60;
+            const particleX = x + Math.cos(angle) * radius;
+            const particleY = y + Math.sin(angle) * radius;
+            
+            const particle = this.scene.add.circle(particleX, particleY, 5, 0x00ff00, 1);
+            particle.setDepth(199);
+            particle.setScrollFactor(0);
+            
+            this.scene.tweens.add({
+                targets: particle,
+                x: x,
+                y: y,
+                alpha: 0,
+                scale: 0.1,
+                duration: 1000,
+                ease: 'Quad.easeIn',
+                onComplete: () => particle.destroy()
+            });
+        }
+        
+        // Create a healing text that floats up
+        const healText = this.scene.add.text(
+            x, 
+            y,
+            `+${amount} HP`,
+            { 
+                fontSize: '32px', 
+                color: '#00FF00',
+                stroke: '#000000',
+                strokeThickness: 6,
+                fontStyle: 'bold'
+            }
+        );
+        healText.setOrigin(0.5);
+        healText.setDepth(200);
+        healText.setScrollFactor(0);
+        healText.setAlpha(0);
+        
+        // Add a pulsing glow effect
+        const glow = this.scene.add.graphics();
+        glow.fillStyle(0x00ff00, 0.3);
+        glow.fillCircle(x, y, 120);
+        glow.setScrollFactor(0);
+        glow.setDepth(199);
+        glow.setAlpha(0);
+        
+        // Sequence the animations
+        this.scene.tweens.add({
+            targets: healText,
+            y: y - 100,
+            alpha: { from: 0, to: 1 },
+            duration: 300,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.scene.tweens.add({
+                    targets: healText,
+                    y: y - 150,
+                    alpha: 0,
+                    duration: 1000,
+                    ease: 'Power2',
+                    delay: 500,
+                    onComplete: () => healText.destroy()
+                });
+            }
+        });
+        
+        // Glow animation
+        this.scene.tweens.add({
+            targets: glow,
+            alpha: { from: 0, to: 0.5 },
+            scale: { from: 0.5, to: 2 },
+            duration: 1000,
+            onComplete: () => {
+                this.scene.tweens.add({
+                    targets: glow,
+                    alpha: 0,
+                    scale: 2.5,
+                    duration: 500,
+                    onComplete: () => glow.destroy()
+                });
+            }
+        });
     }
 
     /**

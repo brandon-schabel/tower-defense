@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
+import ServiceLocator from "../utils/service-locator";
 
 export class InputManager {
     private scene: GameScene;
@@ -45,6 +46,9 @@ export class InputManager {
                 }
             }
         }
+        
+        // Register with service locator
+        ServiceLocator.getInstance().register('inputManager', this);
     }
 
     private initializeKeyMappings(): void {

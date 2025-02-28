@@ -604,7 +604,7 @@ export default class HUD {
     });
   }
 
-  showNextRoundButton(callback: () => void) {
+  public showNextRoundButton(callback: () => void) {
     this.startRoundButton.textContent = 'Next Round';
     this.startRoundButton.disabled = false;
     this.startRoundButton.onclick = () => {
@@ -612,5 +612,31 @@ export default class HUD {
       this.startRoundButton.textContent = 'Start Round';
       this.startRoundButton.onclick = () => this.gameScene.startRound();
     };
+  }
+
+  public disableRoundButton(): void {
+    if (this.startRoundButton) {
+      this.startRoundButton.disabled = true;
+      this.startRoundButton.style.opacity = '0.5';
+      this.startRoundButton.style.cursor = 'not-allowed';
+    }
+  }
+
+  public enableRoundButton(): void {
+    if (this.startRoundButton) {
+      this.startRoundButton.disabled = false;
+      this.startRoundButton.style.opacity = '1.0';
+      this.startRoundButton.style.cursor = 'pointer';
+    }
+  }
+
+  public updateRoundButtonText(text: string): void {
+    if (this.startRoundButton) {
+      this.startRoundButton.textContent = text;
+    }
+  }
+
+  public getResearchTree(): ResearchTree {
+    return ResearchTree.getInstance();
   }
 }

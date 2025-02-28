@@ -5,6 +5,10 @@ import { EnemyType } from "../types/enemy-type";
 import Player from "./player";
 import Tower from "./tower";
 import Base from "./base";
+import ServiceLocator from "../utils/service-locator";
+import { EventBus } from "../utils/event-bus";
+import ItemDropManager from "../managers/item-drop-manager";
+import CombatSystem from "../systems/combat-system";
 
 export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     private healthComponent: HealthComponent;
@@ -20,6 +24,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     private tier: number;
     private specialAbilities: Map<string, any> = new Map();
     private lastAbilityUse: Map<string, number> = new Map();
+    private eventBus: EventBus;
 
     constructor(scene: GameScene, x: number, y: number, health: number, speed: number, onDeath: () => void, type: EnemyType = EnemyType.Basic, tier: number = 1) {
         super(scene, x, y, `${type}-enemy`);
@@ -28,6 +33,8 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
         scene.add.existing(this);
         scene.physics.add.existing(this);
+
+        this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
 
         this.healthComponent = new HealthComponent(
             this,
@@ -43,6 +50,13 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
                 this.destroy();
 
                 this.onDeath();
+                
+                // Emit enemy killed event
+                this.eventBus.emit('enemy-killed', {
+                    position: { x: this.x, y: this.y },
+                    type: this.enemyType,
+                    tier: this.tier
+                });
             }
         );
 
@@ -52,6 +66,9 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.id = Enemy.nextId++;
         this.enemyType = type;
         this.tier = tier;
+        
+        // Register with service locator using a unique ID
+        ServiceLocator.getInstance().register(`enemy_${this.id}`, this);
     }
 
     public addSpecialAbility(type: string, data: any) {
@@ -76,13 +93,13 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     private useAbility(type: string, data: any) {
-        const gameScene = this.scene as GameScene;
+        const combatSystem = ServiceLocator.getInstance().get<CombatSystem>('combatSystem');
 
         switch (type) {
             case 'ranged':
                 const target = this.findTarget(data.range);
-                if (target) {
-                    gameScene.shootProjectile(this, target, data.damage);
+                if (target && combatSystem) {
+                    combatSystem.shootProjectile(this, target.x, target.y, data.damage);
                 }
                 break;
 
@@ -114,20 +131,22 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     private findTarget(range: number): Phaser.Physics.Arcade.Sprite | null {
-        const gameScene = this.scene as GameScene;
-
-        const player = gameScene.getUser();
+        const player = ServiceLocator.getInstance().get<Player>('player');
+        const base = ServiceLocator.getInstance().get<Base>('base');
+        
+        // For towers, we'd need a way to get all towers
+        // This could be through a TowerManager or similar
         const towers: Phaser.Physics.Arcade.Sprite[] = [];
-
-        const base = gameScene.getBase();
 
         let closestTarget: Phaser.Physics.Arcade.Sprite | null = null;
         let closestDistance = range;
 
-        const distToPlayer = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
-        if (distToPlayer < closestDistance) {
-            closestTarget = player;
-            closestDistance = distToPlayer;
+        if (player) {
+            const distToPlayer = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+            if (distToPlayer < closestDistance) {
+                closestTarget = player;
+                closestDistance = distToPlayer;
+            }
         }
 
         towers.forEach((tower: Phaser.Physics.Arcade.Sprite) => {
@@ -138,26 +157,28 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
             }
         });
 
-        const distToBase = Phaser.Math.Distance.Between(this.x, this.y, base.x, base.y);
-        if (distToBase < closestDistance) {
-            closestTarget = base;
-            closestDistance = distToBase;
+        if (base) {
+            const distToBase = Phaser.Math.Distance.Between(this.x, this.y, base.x, base.y);
+            if (distToBase < closestDistance) {
+                closestTarget = base;
+                closestDistance = distToBase;
+            }
         }
 
         return closestTarget;
     }
 
     private findTargetsInRadius(radius: number): Phaser.Physics.Arcade.Sprite[] {
-        const gameScene = this.scene as GameScene;
         const targets: Phaser.Physics.Arcade.Sprite[] = [];
+        
+        const player = ServiceLocator.getInstance().get<Player>('player');
+        const base = ServiceLocator.getInstance().get<Base>('base');
 
-        const player = gameScene.getUser();
-        if (Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) <= radius) {
+        if (player && Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) <= radius) {
             targets.push(player);
         }
 
-        const base = gameScene.getBase();
-        if (Phaser.Math.Distance.Between(this.x, this.y, base.x, base.y) <= radius) {
+        if (base && Phaser.Math.Distance.Between(this.x, this.y, base.x, base.y) <= radius) {
             targets.push(base);
         }
 
@@ -168,6 +189,14 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         if (!this.active || !this.scene) return; // Skip if destroyed or scene is null
 
         this.healthComponent.takeDamage(damage);
+        
+        // Emit damage event
+        this.eventBus.emit('enemy-damaged', {
+            id: this.id,
+            damage: damage,
+            remainingHealth: this.healthComponent.getHealth(),
+            position: { x: this.x, y: this.y }
+        });
 
         // Visual feedback only if scene is available
         if (this.scene && this.scene.add) {
@@ -199,8 +228,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     private handleDropsOnDeath(): void {
-        const gameScene = this.scene as GameScene;
-        const itemDropManager = gameScene.getItemDropManager();
+        const itemDropManager = ServiceLocator.getInstance().get<ItemDropManager>('itemDropManager');
 
         if (!itemDropManager) return;
 

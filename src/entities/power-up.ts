@@ -1,6 +1,10 @@
 // src/entities/power-up.ts
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
+import ServiceLocator from "../utils/service-locator";
+import Player from "./player";
+import GameState from "../utils/game-state";
+import { EventBus } from "../utils/event-bus";
 
 export enum PowerUpType {
     AttackSpeed = 'attack-speed',
@@ -15,6 +19,9 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
     private powerUpType: PowerUpType;
     private duration: number; // in milliseconds
     private value: number;
+    private eventBus: EventBus;
+    private static nextId: number = 0;
+    private id: number;
     
     constructor(scene: GameScene, x: number, y: number, type: PowerUpType) {
         // Choose texture based on power-up type
@@ -31,6 +38,8 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
         super(scene, x, y, texture);
         
         this.powerUpType = type;
+        this.id = PowerUp.nextId++;
+        this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
         
         // Set duration and value based on type
         switch (type) {
@@ -91,11 +100,16 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
                 this.destroy();
             }
         });
+        
+        // Register with service locator
+        ServiceLocator.getInstance().register(`powerup_${this.id}`, this);
     }
     
     private onPickup() {
-        const gameScene = this.scene as GameScene;
-        const player = gameScene.getUser();
+        const player = ServiceLocator.getInstance().get<Player>('player');
+        const gameState = ServiceLocator.getInstance().get<GameState>('gameState');
+        
+        if (!player) return;
         
         switch (this.powerUpType) {
             case PowerUpType.AttackSpeed:
@@ -114,10 +128,18 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
                 player.addTemporaryBuff('invincible', this.value, this.duration);
                 break;
             case PowerUpType.Resources:
-                gameScene.getGameState().earnResources(this.value);
-                // HUD listens via EventBus for resource updates
+                if (gameState) {
+                    gameState.earnResources(this.value);
+                }
                 break;
         }
+        
+        // Emit event
+        this.eventBus.emit('powerup-collected', {
+            type: this.powerUpType,
+            value: this.value,
+            duration: this.duration
+        });
         
         // Visual feedback using simple particles
         const particles = this.scene.add.particles(this.x, this.y, 'projectile', {
@@ -141,5 +163,9 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
     
     public getPowerUpType(): PowerUpType {
         return this.powerUpType;
+    }
+    
+    public getId(): number {
+        return this.id;
     }
 }

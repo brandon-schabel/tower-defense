@@ -1,8 +1,13 @@
+import ServiceLocator from "../utils/service-locator";
+
 export class ConfigManager<T> {
     private static instances: Map<string, ConfigManager<any>> = new Map();
     private configs: Map<string, any> = new Map();
 
-    private constructor() {}
+    private constructor() {
+        // Register with service locator
+        ServiceLocator.getInstance().register('configManager', this);
+    }
 
     public static getInstance<T>(): ConfigManager<T> {
         const key = "default";

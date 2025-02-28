@@ -3,6 +3,7 @@ import { DroppedItem, GameItem, ItemRarity, ItemType, ResourceItem, HealthItem, 
 import TileMapManager from './tile-map-manager';
 import GameScene from '../scenes/game-scene';
 import { GAME_SETTINGS } from '../settings';
+import ServiceLocator from '../utils/service-locator';
 
 export default class ItemDropManager {
     private scene: GameScene;
@@ -22,6 +23,9 @@ export default class ItemDropManager {
 
         // Add collision detection for item pickup
         this.setupCollision();
+        
+        // Register with service locator
+        ServiceLocator.getInstance().register('itemDropManager', this);
     }
 
     /**
@@ -66,7 +70,7 @@ export default class ItemDropManager {
             quantity,
             x,
             y,
-            sprite: this.scene.physics.add.sprite(x, y, item.texture)
+            sprite: undefined // Start with undefined
         };
 
         try {
@@ -76,41 +80,59 @@ export default class ItemDropManager {
             // Make sure sprite is properly set up
             if (!sprite.texture || sprite.texture.key === '__MISSING') {
                 console.warn(`Missing texture for item: ${item.name} (${item.texture})`);
-                // Fallback to a default texture if the intended one is missing
                 sprite.setTexture('projectile'); // Use a texture we know exists
             }
 
-            // Increase scale for better visibility (was 0.5)
-            sprite.setScale(0.8);
+            // Make items much smaller and add a distinct outline to make them more visible
+            sprite.setScale(0.3);
             sprite.setVisible(true);
             sprite.setActive(true);
+            sprite.setDepth(50); // Set a high depth to ensure visibility
+            
+            // Add a simple pulsing effect for visibility
+            this.scene.tweens.add({
+                targets: sprite,
+                alpha: 0.6,
+                duration: 1000,
+                ease: 'Sine.easeInOut',
+                yoyo: true,
+                repeat: -1
+            });
 
             // Store metadata on the sprite
             sprite.setData('dropId', droppedItem.id);
             sprite.setData('itemName', item.name);
-
-            // Add visual effects
-            this.addDropEffects(sprite, item.rarity);
+            sprite.setData('droppedTime', this.scene.time.now);
+            
+            // Set collision properties for better physics
+            sprite.body.setCircle(sprite.width / 4);
+            sprite.body.setCollideWorldBounds(true);
+            sprite.body.setBounce(0.2);
+            sprite.body.setDrag(0.9, 0.9);
 
             // Add to dropped items list
             droppedItem.sprite = sprite;
             this.droppedItems.push(droppedItem);
 
             // Add debug drop text
-            const debugText = this.scene.add.text(x, y - 20, item.name, {
-                fontSize: '10px',
+            const debugText = this.scene.add.text(x, y - 15, item.name, {
+                fontSize: '8px', // Smaller text
                 color: '#ffffff',
                 stroke: '#000000',
                 strokeThickness: 2
             });
             debugText.setOrigin(0.5);
+            debugText.setDepth(51); // Higher than sprite
 
             // Store the text reference to clean it up later
             sprite.setData('debugText', debugText);
 
-            // Auto-despawn after 60 seconds
-            this.scene.time.delayedCall(60000, () => {
-                this.removeItem(droppedItem);
+            // Auto-despawn after 30 seconds (reduced from 60)
+            this.scene.time.delayedCall(30000, () => {
+                const itemToRemove = this.droppedItems.find(item => item.id === droppedItem.id);
+                if (itemToRemove) {
+                    this.removeItem(itemToRemove);
+                }
             });
 
             console.log(`Dropped item: ${item.name} at (${x}, ${y}) with texture: ${item.texture}`);
@@ -264,88 +286,6 @@ export default class ItemDropManager {
     }
 
     /**
-     * Add visual effects to dropped items based on their rarity
-     */
-    private addDropEffects(sprite: Phaser.Physics.Arcade.Sprite, rarity: ItemRarity): void {
-        // Add a slight bouncing effect
-        this.scene.tweens.add({
-            targets: sprite,
-            y: sprite.y - 10,
-            duration: 800,
-            ease: 'Sine.easeInOut',
-            yoyo: true,
-            repeat: -1
-        });
-
-        // Add a slight pulsing effect for rare+ items (gentler pulsing)
-        if (rarity !== ItemRarity.COMMON) {
-            this.scene.tweens.add({
-                targets: sprite,
-                scale: sprite.scale * 1.1, // Reduced from 1.2
-                duration: 1200,
-                ease: 'Sine.easeInOut',
-                yoyo: true,
-                repeat: -1
-            });
-        }
-
-        // Add a colored outline or glow based on rarity
-        let glowColor = 0xffffff; // Default white glow
-
-        switch (rarity) {
-            case ItemRarity.UNCOMMON:
-                glowColor = 0x00ff00; // Green
-                break;
-            case ItemRarity.RARE:
-                glowColor = 0x0088ff; // Blue
-                break;
-            case ItemRarity.EPIC:
-                glowColor = 0xaa00ff; // Purple
-                break;
-            case ItemRarity.LEGENDARY:
-                glowColor = 0xff8800; // Orange/Gold
-                break;
-        }
-
-        // Use a gentler tinting approach that doesn't obscure the original image too much
-        if (rarity !== ItemRarity.COMMON) {
-            // For non-common items, use a partial tint that preserves the original colors better
-            sprite.setTintFill(glowColor);
-
-            // Create a pulsing alpha effect instead of a solid tint
-            this.scene.tweens.add({
-                targets: sprite,
-                alpha: 0.8,
-                duration: 1000,
-                ease: 'Sine.easeInOut',
-                yoyo: true,
-                repeat: -1
-            });
-
-            // Try adding a particle emitter for legendary and epic items
-            if (rarity === ItemRarity.LEGENDARY || rarity === ItemRarity.EPIC) {
-                try {
-                    // Create a simple particle effect
-                    const particles = this.scene.add.particles(sprite.x, sprite.y, 'projectile', {
-                        lifespan: 1000,
-                        speed: { min: 10, max: 20 },
-                        scale: { start: 0.1, end: 0 },
-                        quantity: 1,
-                        blendMode: 'ADD',
-                        tint: glowColor,
-                        emitting: true
-                    });
-
-                    // Store the particle emitter for cleanup
-                    sprite.setData('particles', particles);
-                } catch (error) {
-                    console.error("Error creating particles:", error);
-                }
-            }
-        }
-    }
-
-    /**
      * Setup collision detection for item pickup
      */
     private setupCollision(): void {
@@ -385,29 +325,102 @@ export default class ItemDropManager {
      * @param droppedItem The item to remove
      */
     public removeItem(droppedItem: DroppedItem): void {
-        // Remove from our tracking list
-        const index = this.droppedItems.indexOf(droppedItem);
-        if (index !== -1) {
-            this.droppedItems.splice(index, 1);
-
-            // Remove sprite
+        console.log(`Attempting to fully remove item: ${droppedItem.item.name}`);
+        
+        try {
+            // Step 1: Remove from our tracking list first
+            const index = this.droppedItems.indexOf(droppedItem);
+            if (index !== -1) {
+                this.droppedItems.splice(index, 1);
+            }
+            
+            // Step 2: Handle sprite cleanup with multiple safety measures
             if (droppedItem.sprite) {
-                // Remove debug text if it exists
+                // Kill all tweens that might be animating this sprite
+                this.scene.tweens.getTweensOf(droppedItem.sprite).forEach(tween => {
+                    tween.stop();
+                    tween.remove();
+                });
+                
+                // Find and destroy any debug text
                 const debugText = droppedItem.sprite.getData('debugText');
-                if (debugText) {
+                if (debugText && debugText.destroy) {
                     debugText.destroy();
                 }
-
-                // Remove associated light
+                
+                // Find and destroy any particles
+                const particles = droppedItem.sprite.getData('particles');
+                if (particles && particles.destroy) {
+                    particles.destroy();
+                }
+                
+                // Find and destroy any light
                 const light = droppedItem.sprite.getData('light');
                 if (light) {
                     this.scene.lights.removeLight(light);
                 }
-
-                // Destroy the sprite
-                droppedItem.sprite.destroy();
-
-                console.log(`Removed item: ${droppedItem.item.name}`);
+                
+                // Completely disable the sprite (both visible and active flags)
+                droppedItem.sprite.setVisible(false);
+                droppedItem.sprite.setActive(false);
+                
+                // Remove from physics world
+                if (droppedItem.sprite.body) {
+                    this.scene.physics.world.remove(droppedItem.sprite.body);
+                }
+                
+                // Remove from any groups it might be in
+                if (this.itemGroup) {
+                    this.itemGroup.remove(droppedItem.sprite, true, true);
+                }
+                
+                // Final destruction with removeFromDisplayList and removeFromUpdateList flags
+                droppedItem.sprite.destroy(true);
+                
+                // Force garbage collection by removing the reference
+                droppedItem.sprite = undefined;
+                
+                // Add an additional cleanup check after a short delay to catch any persistent sprites
+                this.scene.time.delayedCall(50, () => {
+                    // Look for any sprites at this position that might be remnants
+                    const items = this.scene.children.getAll().filter(obj => {
+                        if (obj instanceof Phaser.GameObjects.Sprite) {
+                            const dist = Phaser.Math.Distance.Between(
+                                obj.x, obj.y, droppedItem.x, droppedItem.y);
+                            return dist < 10; // Close enough to be the same item
+                        }
+                        return false;
+                    });
+                    
+                    // Destroy any found sprites at this position
+                    if (items.length > 0) {
+                        console.log(`Found ${items.length} lingering sprites at item position, cleaning up`);
+                        items.forEach(obj => obj.destroy());
+                    }
+                });
+            }
+            
+            console.log(`Successfully removed item: ${droppedItem.item.name}`);
+        } catch (error) {
+            console.error(`Error during item removal for ${droppedItem.item.name}:`, error);
+            
+            // Last-ditch effort - try to find and nuke any sprite at this location
+            try {
+                const x = droppedItem.x;
+                const y = droppedItem.y;
+                
+                this.scene.children.getAll().forEach(obj => {
+                    if (obj instanceof Phaser.GameObjects.Sprite || 
+                        obj instanceof Phaser.GameObjects.Text) {
+                        const dist = Phaser.Math.Distance.Between(obj.x, obj.y, x, y);
+                        if (dist < 20) { // Close enough to be related to this item
+                            console.log(`Force-destroying object at (${obj.x}, ${obj.y})`);
+                            obj.destroy();
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error("Failed last-ditch cleanup:", e);
             }
         }
     }

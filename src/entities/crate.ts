@@ -5,6 +5,11 @@ import { GameItem } from "../types/item";
 import Player from "./player";
 import { HealthComponent } from "../utils/health-component";
 import { CrateType, CrateContents } from "../types/crate-types";
+import ServiceLocator from "../utils/service-locator";
+import TileMapManager from "../managers/tile-map-manager";
+import ItemDropManager from "../managers/item-drop-manager";
+import GameState from "../utils/game-state";
+import { EventBus } from "../utils/event-bus";
 
 
 export default class Crate extends Phaser.Physics.Arcade.Sprite {
@@ -16,6 +21,7 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
     private tileX: number;
     private tileY: number;
     private broken: boolean = false;
+    private eventBus: EventBus;
 
     constructor(
         scene: GameScene,
@@ -25,7 +31,7 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         health: number = 50,
         contents: CrateContents = { resources: 50 }
     ) {
-        const tileMapManager = scene.getTileMapManager();
+        const tileMapManager = ServiceLocator.getInstance().get<TileMapManager>('tileMapManager')!;
         const worldPos = tileMapManager.tileToWorld(tileX, tileY);
 
         super(scene, worldPos.x, worldPos.y, `crate-${type}`);
@@ -42,6 +48,7 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         this.contents = contents;
         this.tileX = tileX;
         this.tileY = tileY;
+        this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
 
         scene.add.existing(this);
         scene.physics.add.existing(this, true); // true = static body
@@ -66,6 +73,9 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         this.healthBar = new HealthBar(scene, this, this.maxHealth);
 
         this.on('pointerdown', this.handleCrateClick, this);
+        
+        // Register with service locator with a unique ID
+        ServiceLocator.getInstance().register(`crate_${tileX}_${tileY}`, this);
     }
 
     private handleCrateClick() {
@@ -100,13 +110,12 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         if (this.broken) return;
         this.broken = true;
 
-        const gameScene = this.scene as GameScene;
-
-        const itemDropManager = gameScene.getItemDropManager();
+        const itemDropManager = ServiceLocator.getInstance().get<ItemDropManager>('itemDropManager')!;
+        const gameState = ServiceLocator.getInstance().get<GameState>('gameState')!;
 
         // Drop resources if any
         if (this.contents.resources) {
-            gameScene.getGameState().earnResources(this.contents.resources);
+            gameState.earnResources(this.contents.resources);
 
             // Show floating text for resources
             const resourceText = this.scene.add.text(
@@ -147,8 +156,15 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         });
 
         // Free up the tile
-        const tileMapManager = (this.scene as GameScene).getTileMapManager();
+        const tileMapManager = ServiceLocator.getInstance().get<TileMapManager>('tileMapManager')!;
         tileMapManager.releaseTiles(this.tileX, this.tileY, 1, 1);
+        
+        // Emit event
+        this.eventBus.emit('crate-broken', {
+            position: { x: this.x, y: this.y },
+            type: this.crateType,
+            contents: this.contents
+        });
 
         // Clean up and destroy
         this.healthBar.cleanup();

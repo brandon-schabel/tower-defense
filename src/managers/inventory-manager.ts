@@ -1,5 +1,6 @@
 import { GameItem, InventorySlot } from '../types/item';
 import { EventEmitter } from 'events';
+import ServiceLocator from '../utils/service-locator';
 
 /**
  * Class that manages inventory slots, adding/removing items and handling stacking
@@ -12,6 +13,9 @@ export default class InventoryManager extends EventEmitter {
         super();
         this.maxSlots = maxSlots;
         this.slots = new Array(maxSlots).fill(null);
+        
+        // Register with service locator
+        ServiceLocator.getInstance().register('inventoryManager', this);
     }
 
     /**

@@ -1,4 +1,3 @@
-import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 import Player from "../entities/player";
 import Tower from "../entities/tower";
@@ -6,10 +5,9 @@ import Enemy from "../entities/enemy";
 import Base from "../entities/base";
 import PowerUp, { PowerUpType } from "../entities/power-up";
 import Crate from "../entities/crate";
-import { GAME_SETTINGS, TowerType, EnemyConfig } from "../settings";
+import { GAME_SETTINGS, TowerType,  } from "../settings";
 import { EnemyType } from "../types/enemy-type";
 import { CrateContents, CrateType } from "../types/crate-types";
-import { ConfigManager } from "../managers/config-manager";
 import { gameConfig } from "../utils/app-config";
 
 /**

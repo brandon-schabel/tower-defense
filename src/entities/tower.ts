@@ -1,9 +1,13 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import { TowerType, TowerSettings } from "../settings";
+import { TowerType, TowerSettings, GAME_SETTINGS } from "../settings";
 import Enemy from "./enemy";
 import { HealthComponent } from "../utils/health-component";
-import { gameConfig } from "../utils/app-config";
+import ServiceLocator from "../utils/service-locator";
+import TileMapManager from "../managers/tile-map-manager";
+import EntityManager from "../managers/entity-manager";
+import CombatSystem from "../systems/combat-system";
+import { EventBus } from "../utils/event-bus";
 
 export default class Tower extends Phaser.Physics.Arcade.Sprite {
     towerType: TowerType;
@@ -27,30 +31,30 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     private tier: number = 1; // Tower tier, starts at 1
     private maxTier: number = 5; // Maximum tier a tower can reach
     private tierMultipliers = {
-        2: 1.25, // 25% improvement
-        3: 1.5,  // 50% improvement
-        4: 2.0,  // 100% improvement
-        5: 2.5   // 150% improvement
+        damage: [1, 1.2, 1.5, 2, 3],
+        range: [1, 1.1, 1.2, 1.3, 1.5],
+        speed: [1, 1.1, 1.25, 1.5, 2]
     };
-
-
+    private eventBus: EventBus;
+    private entityManager: EntityManager;
+    private combatSystem: CombatSystem;
 
     constructor(scene: GameScene, tileX: number, tileY: number, type: TowerType) {
-        const tileMapManager = scene.getTileMapManager();
+        const tileMapManager = ServiceLocator.getInstance().get<TileMapManager>('tileMapManager')!;
         const worldPos = tileMapManager.tileToWorld(tileX, tileY);
         super(scene, worldPos.x, worldPos.y, type);
         this.towerType = type;
 
-        const towerConfig = gameConfig.getConfig("towers")?.[type];
-        if (!towerConfig) throw new Error(`Invalid tower configuration for type: ${type}`);
-        this.towerData = towerConfig;
-
-        // NOW we can access towerData
-        this.shootCooldown = this.towerData.shootCooldown;
+        this.towerData = GAME_SETTINGS.towers[type];
         this.tileX = tileX;
         this.tileY = tileY;
         this.tileWidth = this.towerData.size.width;
         this.tileHeight = this.towerData.size.height;
+
+        // Get services from service locator
+        this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
+        this.entityManager = ServiceLocator.getInstance().get<EntityManager>('entityManager')!;
+        this.combatSystem = ServiceLocator.getInstance().get<CombatSystem>('combatSystem')!;
 
         scene.add.existing(this);
         scene.physics.add.existing(this, true);
@@ -61,70 +65,79 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
             scene.removeTower(this);
             this.destroyTower();
         });
+
+        // Occupy tiles in the tile map
+        tileMapManager.occupyTiles(
+            tileX, tileY,
+            this.tileWidth, this.tileHeight,
+            'tower',
+            this.getId()
+        );
+        
+        // Register with service locator
+        ServiceLocator.getInstance().register(`tower_${this.getId()}`, this);
     }
 
     private getCurrentShootCooldown(): number {
-        const baseCooldown = gameConfig.getConfig("towers")?.[this.towerType].shootCooldown || -1;
-        // Increase speed improvement from 15% to 20% per level
-        const reduction = 0.2 * this.speedLevel;
-        // Apply tier multiplier (higher tier = faster shooting)
-        if (baseCooldown === -1) {
-            console.error(`Base cooldown not found for tower type: ${this.towerType}`);
-            return -1;
+        if (this.shootCooldown !== null) {
+            return this.shootCooldown;
         }
-        return baseCooldown * (1 - reduction) / this.getTierMultiplier();
+
+        // Apply speed level and tier bonuses
+        const baseSpeed = this.towerData.shootCooldown;
+        const speedMultiplier = 1 - (this.speedLevel * 0.1); // 10% reduction per level
+        const tierMultiplier = this.tierMultipliers.speed[this.tier - 1];
+        
+        return baseSpeed * speedMultiplier / tierMultiplier;
     }
 
     getCurrentRange(): number {
-        const baseRange = (gameConfig.getConfig("towers")?.[this.towerType].range) || -1;
-
-
-        if (baseRange === -1) {
-            console.error(`Base range not found for tower type: ${this.towerType}`);
-            return -1;
+        // Apply range level and tier bonuses
+        const baseRange = this.towerData.range;
+        const rangeMultiplier = 1 + (this.rangeLevel * 0.15); // 15% increase per level
+        const tierMultiplier = this.tierMultipliers.range[this.tier - 1];
+        
+        // Apply special power bonus if applicable
+        let specialBonus = 1;
+        if (this.specialPower === "ice") {
+            specialBonus = 1.2; // Ice towers get 20% more range
         }
-
-        // Increase range bonus from 30 to 40 pixels per level
-        const upgradedRange = baseRange + 40 * this.rangeLevel;
-        // Apply tier multiplier (higher tier = better range)
-        return upgradedRange * this.getTierMultiplier();
+        
+        return baseRange * rangeMultiplier * tierMultiplier * specialBonus;
     }
 
     getCurrentDamage(): number {
-        const baseDamage = (gameConfig.getConfig("towers")?.[this.towerType].damage) || -1;
-
-        if (baseDamage === -1) {
-            console.error(`Base damage not found for tower type: ${this.towerType}`);
-            return -1;
+        // Apply damage level and tier bonuses
+        const baseDamage = this.towerData.damage;
+        const damageMultiplier = 1 + (this.damageLevel * 0.2); // 20% increase per level
+        const tierMultiplier = this.tierMultipliers.damage[this.tier - 1];
+        
+        // Apply special power bonus if applicable
+        let specialBonus = 1;
+        if (this.specialPower === "fire") {
+            specialBonus = 1.3; // Fire towers get 30% more damage
+        } else if (this.specialPower === "critical") {
+            // Critical towers have a chance to do double damage
+            // This is handled in the shoot method
+            specialBonus = 1.2; // Base damage increase
         }
-
-        // Increase damage bonus from 25% to 30% per level
-        let damage = baseDamage * (1 + 0.3 * this.damageLevel);
-
-        if (this.specialPower === "critical") {
-            // Increase critical bonus from 30% to 50%
-            damage += baseDamage * 0.5;
-        }
-
-        // Apply tier multiplier (higher tier = more damage)
-        return damage * this.getTierMultiplier();
+        
+        return Math.round(baseDamage * damageMultiplier * tierMultiplier * specialBonus);
     }
 
     // Get a multiplier based on current tier
     private getTierMultiplier(): number {
         if (this.tier === 1) return 1;
-        return this.tierMultipliers[this.tier as 2 | 3 | 4 | 5];
+        return 1 + ((this.tier - 1) * 0.25); // 25% increase per tier
     }
 
     // Get the cost to upgrade to the next tier
     public getTierUpgradeCost(): number {
         if (this.tier >= this.maxTier) return Infinity;
-        const basePrice = (gameConfig.getConfig("towers")?.[this.towerType].price) || -1;
-        if (basePrice === -1) {
-            console.error(`Base price not found for tower type: ${this.towerType}`);
-            return -1;
-        }
-        return basePrice * this.tier; // Base price * current tier
+        const baseCost = this.towerData.price;
+        const tierFactor = Math.pow(2, this.tier); // Exponential increase
+        
+        return Math.round(baseCost * 0.75 * tierFactor);
     }
 
     // Upgrade the tower to the next tier
@@ -140,6 +153,13 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         const newMaxHealth = this.towerData.health * this.getTierMultiplier();
         this.healthComponent.setMaxHealth(newMaxHealth, true);
 
+        // Emit event for tier upgrade
+        this.eventBus.emit('tower-tier-upgraded', {
+            towerId: this.getId(),
+            newTier: this.tier,
+            type: this.towerType
+        });
+
         return true;
     }
 
@@ -148,10 +168,10 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         // Different tint colors for different tiers
         const tierColors = {
             1: 0xffffff, // No tint for tier 1
-            2: 0x00ff00, // Green for tier 2
-            3: 0x0000ff, // Blue for tier 3
-            4: 0xff00ff, // Purple for tier 4
-            5: 0xff0000  // Red for tier 5
+            2: 0xcccccc, // Silver for tier 2
+            3: 0xffcc00, // Gold for tier 3
+            4: 0x00ccff,  // Diamond blue for tier 4
+            5: 0xff00ff   // Mythic purple for tier 5
         };
 
         this.setTint(tierColors[this.tier as 1 | 2 | 3 | 4 | 5]);
@@ -172,7 +192,9 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     public getUpgradeCost(type: "speed" | "range" | "damage"): number {
         const level = this[type + "Level" as keyof Tower] as number;
         if (level >= this.maxUpgradeLevel) return Infinity; // Or some other indicator
-        return 100 * (level + 1); // Example cost calculation
+        const baseCost = Math.round(this.towerData.price * 0.4);
+        const levelFactor = Math.pow(1.5, level);
+        return Math.round(baseCost * levelFactor);
     }
 
     public upgrade(type: "speed" | "range" | "damage") {
@@ -182,13 +204,18 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     }
 
     public getSpecialPowerCost(): number {
-        return 500; // Fixed cost for special powers
+        return Math.round(this.towerData.price * 1.5);
     }
 
     public setSpecialPower(power: "fire" | "ice" | "critical") {
         if (!this.specialPower) {  // Only allow one special power
             this.specialPower = power;
         }
+        
+        // Visual effect based on power
+        if (power === "fire") this.setTint(0xff6600);
+        else if (power === "ice") this.setTint(0x66ffff);
+        else if (power === "critical") this.setTint(0xffff00);
     }
 
     // Getters for UI
@@ -226,10 +253,25 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     }
 
     public shoot(target: Phaser.Physics.Arcade.Sprite) {
-        const gameScene = this.scene as GameScene;
-        const damage = this.getCurrentDamage();
-
-        gameScene.shootProjectile(this, target.x, target.y, damage, this.towerData.projectileType);
+        let damage = this.getCurrentDamage();
+        
+        // Handle critical hits
+        if (this.specialPower === "critical" && Math.random() < 0.25) {
+            damage *= 2;
+        }
+        
+        let projectileType = 'normal';
+        
+        // Set projectile type based on special power
+        if (this.specialPower === "fire") {
+            projectileType = 'fire';
+        } else if (this.specialPower === "ice") {
+            projectileType = 'ice';
+        } else if (this.specialPower === "critical" && Math.random() < 0.25) {
+            projectileType = 'critical';
+        }
+        
+        this.combatSystem.shootProjectile(this, target.x, target.y, damage, projectileType);
         this.shotsFired++;
     }
 
@@ -258,13 +300,15 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
 
     private handleShooting() {
         const currentTime = this.scene.time.now;
-        const gameScene = this.scene as GameScene;
-        const projectileType = gameConfig.getConfig("towers")?.[this.towerType].projectileType || 'normal';
-        // const projectileSettings = gameConfig.getConfig("projectiles")?.[projectileType] || {}; // No longer used
+        
+        if (currentTime - this.lastShotTime < this.getCurrentShootCooldown()) {
+            return;
+        }
+        
         if (this.towerType === 'area-tower') {
-            this.handleAreaTowerShooting(currentTime, gameScene);
+            this.handleAreaTowerShooting(currentTime, this.scene as GameScene);
         } else {
-            this.handleSingleTargetTowerShooting(currentTime, gameScene, projectileType);
+            this.handleSingleTargetTowerShooting(currentTime, this.scene as GameScene, this.towerType);
         }
     }
 
@@ -286,11 +330,11 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
                     const damage = this.getCurrentDamage();
                     if (this.specialPower === "fire") {
                         // Pass the special power as the projectile type
-                        gameScene.shootProjectile(this, enemy.x, enemy.y, damage, "fire");
+                        this.combatSystem.shootProjectile(this, enemy.x, enemy.y, damage, "fire");
                     } else if (this.specialPower === "ice") {
-                        gameScene.shootProjectile(this, enemy.x, enemy.y, damage, "ice");
+                        this.combatSystem.shootProjectile(this, enemy.x, enemy.y, damage, "ice");
                     } else {
-                        gameScene.shootProjectile(this, enemy.x, enemy.y, damage, this.towerData.projectileType); // Use tower's projectile type
+                        this.combatSystem.shootProjectile(this, enemy.x, enemy.y, damage, this.towerData.projectileType); // Use tower's projectile type
                     }
                 });
                 this.lastShotTime = currentTime;
@@ -298,24 +342,12 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         }
     }
 
-
     private handleSingleTargetTowerShooting(currentTime: number, gameScene: GameScene, projectileType: string) {
-        const nearestEnemy = this.findNearestEnemy(gameScene);
-        if (nearestEnemy && currentTime - this.lastShotTime >= this.getCurrentShootCooldown()) {
-            const distance = Phaser.Math.Distance.Between(this.x, this.y, nearestEnemy.x, nearestEnemy.y);
-            const projectileSpeed = 400; // Must match shootProjectile speed
-            const timeToReach = distance / projectileSpeed;
-
-            // Null check for nearestEnemy.body
-            const enemyVelocity = nearestEnemy.body ? nearestEnemy.body.velocity : { x: 0, y: 0 };
-            const targetX = nearestEnemy.x + enemyVelocity.x * timeToReach;
-            const targetY = nearestEnemy.y + enemyVelocity.y * timeToReach;
-            const damage = this.getCurrentDamage();
-
-            // Use special power if available, otherwise use tower's default, otherwise use 'normal'
-            const finalProjectileType = this.specialPower || projectileType;
-            gameScene.shootProjectile(this, targetX, targetY, damage, finalProjectileType);
+        const target = this.findNearestEnemy(gameScene);
+        
+        if (target) {
             this.lastShotTime = currentTime;
+            this.shoot(target);
         }
     }
 
@@ -335,6 +367,13 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         if (!this.active) return; // Exit if the tower is already destroyed
         console.log(`${this.towerType} taking ${damage} damage`);
         this.healthComponent.takeDamage(damage);
+        
+        // Emit damage event
+        this.eventBus.emit('tower-damaged', {
+            towerId: this.getId(),
+            damage: damage,
+            remainingHealth: this.healthComponent.getHealth()
+        });
     }
 
     // Override destroy to free up tiles
@@ -352,6 +391,6 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
 
     // Get a unique ID for this tower
     getId(): string {
-        return `tower_${this.towerType}_${this.x}_${this.y}`;
+        return `tower_${this.tileX}_${this.tileY}_${this.towerType}`;
     }
 } 

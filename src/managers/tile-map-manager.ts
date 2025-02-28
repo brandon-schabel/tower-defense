@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { GAME_SETTINGS } from "../settings";
+import ServiceLocator from "../utils/service-locator";
 
 /**
  * Manages the tile map for the game, handling placement validation and coordinate conversion
@@ -19,6 +20,9 @@ export default class TileMapManager {
         this.occupancyMap = new Map();
         
         this.initializeMap();
+        
+        // Register with service locator
+        ServiceLocator.getInstance().register('tileMapManager', this);
     }
     
     /**

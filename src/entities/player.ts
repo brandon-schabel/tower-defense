@@ -7,6 +7,9 @@ import { InputManager } from "../managers/input-manger";
 import { ConfigManager } from "../managers/config-manager"; // Import ConfigManager
 import ResearchTree, { ResearchNode } from "../utils/research-tree"; // Import ResearchTree and ResearchNode
 import { gameConfig } from "../utils/app-config";
+import ServiceLocator from "../utils/service-locator";
+import { EventBus } from "../utils/event-bus";
+import CombatSystem from "../systems/combat-system";
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
   private healthComponent: HealthComponent;
@@ -33,6 +36,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   private inputManager: InputManager; // Add InputManager
 
   private researchTree: ResearchTree;
+
+  private eventBus: EventBus;
 
   constructor(scene: GameScene, x: number, y: number) {
     super(scene, x, y, "user");
@@ -122,6 +127,12 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Make sure max health is properly set after all initialization
     this.getMaxHealth(); // Recalculate max health after research
+
+    // Register with service locator
+    ServiceLocator.getInstance().register('player', this);
+    
+    // Get event bus from service locator
+    this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
   }
 
   update() {
@@ -163,6 +174,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
   heal(amount: number) {
     this.healthComponent.heal(amount);
+    this.eventBus.emit('player-healed', {
+        amount: amount,
+        newHealth: this.healthComponent.getHealth()
+    });
   }
 
   getHealth(): number {
@@ -172,7 +187,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   takeDamage(damage: number) {
     if (!this.active) return; // Exit if the user is already destroyed
     this.healthComponent.takeDamage(damage);
-    (this.scene as GameScene).eventBus.emit('player-damaged', { damage, health: this.getHealth() }); // Emit player-damaged event
+    this.eventBus.emit('player-damaged', {
+        damage: damage,
+        remainingHealth: this.healthComponent.getHealth()
+    });
   }
 
   private handleShooting() {
@@ -243,6 +261,17 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Update last shot time.  Moved from handleShooting()
     this.lastShotTime = (this.scene as GameScene).time.now;
+
+    const combatSystem = ServiceLocator.getInstance().get<CombatSystem>('combatSystem');
+    if (combatSystem) {
+        combatSystem.shootProjectile(
+            this,
+            worldPoint.x,
+            worldPoint.y,
+            damage,
+            projectileType
+        );
+    }
   }
 
   // Apply research effects to movement speed
