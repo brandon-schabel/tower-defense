@@ -20,7 +20,7 @@ export abstract class BaseScene extends Phaser.Scene {
 
     protected loadAssets(): void {
         // Base assets
-        this.load.image("user", "assets/user.svg");
+        this.load.image("player", "assets/player.svg");
         this.load.image("base", "assets/base.svg");
         this.load.image("projectile", "assets/projectile.svg");
 

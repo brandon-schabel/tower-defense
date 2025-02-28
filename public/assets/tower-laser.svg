@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="laserMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#555" />
+      <stop offset="100%" stop-color="#222" />
+    </linearGradient>
+    <radialGradient id="laserGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff" />
+      <stop offset="100%" stop-color="#0ff" />
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" />
+    </filter>
+  </defs>
+  <g id="tower-laser">
+    <rect x="20" y="40" width="24" height="16" fill="url(#laserMetal)" stroke="#000" stroke-width="2" />
+    <circle cx="32" cy="36" r="10" fill="#333" stroke="#000" stroke-width="2" />
+    <rect x="30" y="12" width="4" height="24" fill="#999" stroke="#000" stroke-width="1" />
+    <circle cx="32" cy="10" r="4" fill="url(#laserGlow)" filter="url(#glow)" />
+    <path d="M32 6 L32 1" stroke="#0ff" stroke-width="2" stroke-linecap="round" opacity="0.8" />
+    <circle cx="32" cy="36" r="6" fill="#111" stroke="#555" stroke-width="1" />
+  </g>
+</svg>

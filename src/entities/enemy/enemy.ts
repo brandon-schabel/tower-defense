@@ -71,21 +71,31 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
             health,
             health,
             () => {
+                // Mark as being destroyed to prevent further interactions
+                this.setData('markedForDestruction', true);
+                
+                console.log(`Enemy ${this.id} died, calling removeEnemy`);
+                
+                // Cleanup timers
                 if (this.burnTimer) this.burnTimer.remove();
                 if (this.slowTimer) this.slowTimer.remove();
 
-                this.handleDropsOnDeath();
-
-                this.destroy();
-
+                // Execute callback first
                 this.onDeath();
                 
-                // Emit enemy killed event
+                // Handle drops
+                this.handleDropsOnDeath();
+                
+                // Emit events before destroying
                 this.eventBus.emit('enemy-killed', {
                     position: { x: this.x, y: this.y },
                     type: this.enemyType,
                     tier: this.tier
                 });
+                
+                // Now handle proper removal from entity manager
+                // This will handle the actual destroy() call
+                this.entityManager.removeEnemy(this);
             }
         );
 
@@ -214,8 +224,13 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     takeDamage(damage: number) {
-        if (!this.active || !this.scene) return; // Skip if destroyed or scene is null
+        // Enhanced check to ensure valid state before taking damage
+        if (!this.active || !this.scene || !this.body || this.getData('markedForDestruction')) {
+            console.log(`Enemy ${this.id} cannot take damage - active: ${this.active}, hasScene: ${!!this.scene}, hasBody: ${!!this.body}, markedForDestruction: ${this.getData('markedForDestruction')}`);
+            return; // Skip if destroyed, scene is null, no body, or already marked for destruction
+        }
 
+        console.log(`Enemy ${this.id} taking damage: ${damage}, current health: ${this.healthComponent.getHealth()}`);
         this.healthComponent.takeDamage(damage);
         
         // Emit damage event
@@ -316,7 +331,19 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     destroy(fromScene?: boolean) {
+        // First clean up health component
         this.healthComponent.cleanup();
+        
+        // Make sure we're not in the physics system anymore by disabling the body
+        if (this.body) {
+            this.disableBody(true, true);
+        }
+        
+        // Make sure we're properly marked as inactive
+        this.setActive(false);
+        this.setVisible(false);
+        
+        // Finally do the actual destroy
         super.destroy(fromScene);
     }
 

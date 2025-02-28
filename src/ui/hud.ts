@@ -355,7 +355,9 @@ export default class HUD {
 
   private setupEventListeners() {
     this.startRoundButton.addEventListener('click', () => {
-      this.gameScene.startRound();
+      if (this.startRoundButton.disabled) return;
+      
+      this.gameScene.getGameCoordinator().startRound();
       this.startRoundButton.disabled = true;
     });
 
@@ -619,7 +621,7 @@ export default class HUD {
     this.startRoundButton.onclick = () => {
       callback();
       this.startRoundButton.textContent = 'Start Round';
-      this.startRoundButton.onclick = () => this.gameScene.startRound();
+      this.startRoundButton.onclick = () => this.gameScene.getGameCoordinator().startRound();
     };
   }
 

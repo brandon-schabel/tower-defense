@@ -14,14 +14,15 @@ import { BaseScene } from "./base-scene";
 import { EventBus } from "../core/event-bus";
 import { InputManager } from "../managers/input-manger";
 import { EnemyType } from "../entities/enemy/enemy-type";
-import { gameConfig } from "../utils/app-config";
 import BuildSystem from "../systems/build-system";
-import RoundManager from "../systems/round-manager";
+import RoundSystem from "../systems/round-system";
 import EntityManager from "../managers/entity-manager";
 import TowerManager from "../managers/tower-manager";
 import CombatSystem from "../systems/combat-system";
 import GameCoordinator from "../core/game-coordinator";
 import UIManager from "../managers/ui-manager";
+import { GameStateEnum } from "../utils/game-state";
+import Enemy from "../entities/enemy/enemy";
 
 // Remove constant for debug settings
 const DEFAULT_DROP_CHANCE = 0.3; // Default item drop chance
@@ -49,7 +50,7 @@ export default class GameScene extends BaseScene {
 
     // Managers
     private buildController!: BuildSystem;
-    private roundManager!: RoundManager;
+    private roundManager!: RoundSystem;
     private entityManager!: EntityManager;
     private towerManager!: TowerManager;
     private combatSystem!: CombatSystem;
@@ -73,15 +74,23 @@ export default class GameScene extends BaseScene {
     }
 
     init(data: SceneInitData) {
-        // Initialize game state
-        this.gameState = new GameState();
+        // Initialize event bus first
+        this.eventBus = new EventBus();
+        
+        // Initialize game state with event bus
+        this.gameState = new GameState(this.eventBus);
+        
+        // Load saved state if this isn't a new game
+        if (data && !data.isNewGame) {
+            this.gameState.loadFromLocalStorage();
+        }
         
         // Set difficulty level
         if (data && data.isNewGame) {
             this.difficultyLevel = DifficultyLevel.Medium;
         }
         
-        this.game.events.emit('start-game');
+        // Don't emit 'start-game' here - we'll properly initialize the game in create()
     }
 
     create() {
@@ -94,11 +103,6 @@ export default class GameScene extends BaseScene {
         this.debugGraphics = this.add.graphics();
 
         console.log('[GameScene] Scene created, available textures:', this.textures.getTextureKeys());
-
-        // Load configurations
-        Object.entries(GAME_SETTINGS).forEach(([key, value]) => {
-            gameConfig.loadConfig(key as keyof typeof GAME_SETTINGS, value);
-        });
 
         // Initialize tile map
         this.tileMapManager = new TileMapManager(this);
@@ -114,25 +118,34 @@ export default class GameScene extends BaseScene {
             this.gameState
         );
 
-        // Set up camera to follow player
-        this.cameras.main.startFollow(this.entityManager.getUser());
-        this.cameraController = new CameraController(this, this.entityManager.getUser());
-
         // Initialize other managers with dependencies
         this.itemDropManager = new ItemDropManager(this, this.tileMapManager, this.eventBus);
         
-        // Get the player's inventory manager
-        const playerInventory = this.entityManager.getUser().getInventory() as any;
-        this.inventoryUI = new InventoryUI(this, playerInventory);
-        this.inventoryUI.hide();
-        this.hud = new HUD(this);
-
         // Initialize systems with dependencies
         this.combatSystem = new CombatSystem(
             this,
             this.entityManager,
             this.eventBus
         );
+
+        // Set combat system in entity manager
+        this.entityManager.setCombatSystem(this.combatSystem);
+        
+        // Set item drop manager in entity manager
+        this.entityManager.setItemDropManager(this.itemDropManager);
+        
+        // Complete entity manager initialization now that dependencies are set
+        this.entityManager.completeInitialization();
+        
+        // NOW set up camera to follow player AFTER player is created
+        this.cameras.main.startFollow(this.entityManager.getUser());
+        this.cameraController = new CameraController(this, this.entityManager.getUser());
+        
+        // Get the player's inventory manager AFTER player is created
+        const playerInventory = this.entityManager.getUser().getInventory() as any;
+        this.inventoryUI = new InventoryUI(this, playerInventory);
+        this.inventoryUI.hide();
+        this.hud = new HUD(this);
 
         this.towerManager = new TowerManager(
             this,
@@ -150,7 +163,7 @@ export default class GameScene extends BaseScene {
             this.combatSystem
         );
 
-        this.roundManager = new RoundManager(
+        this.roundManager = new RoundSystem(
             this,
             this.entityManager,
             this.eventBus,
@@ -195,6 +208,12 @@ export default class GameScene extends BaseScene {
         });
 
         this.applyResearchEffects();
+
+        // Properly initialize the game state
+        this.gameCoordinator.getGameStateManager().startNewGame();
+        
+        // Now that everything is set up, emit 'start-game'
+        this.game.events.emit('start-game');
     }
 
     private applyResearchEffects() {
@@ -227,6 +246,12 @@ export default class GameScene extends BaseScene {
 
     private setupInputHandlers(): void {
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            // Skip processing if we're in inventory mode
+            if (this.gameState.isInventoryOpen) {
+                return;
+            }
+            
+            // Handle build mode placement
             if (this.buildController.isBuildMode()) {
                 if (pointer.leftButtonDown()) {
                     this.buildController.handlePlacement(pointer.worldX, pointer.worldY);
@@ -234,10 +259,27 @@ export default class GameScene extends BaseScene {
                 return;
             }
 
+            // If not in build mode, check if we clicked on a tower
             const worldPoint = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
             const clickedTower = this.towerManager.findTowerAt(worldPoint.x, worldPoint.y);
-            if (clickedTower) this.towerManager.selectTower(clickedTower);
-            else this.towerManager.deselectTower();
+            if (clickedTower) {
+                this.towerManager.selectTower(clickedTower);
+            } else {
+                this.towerManager.deselectTower();
+                
+                // Note: We don't need to handle shooting here since the Player.update() 
+                // handles shooting toward mouse on pointer down
+            }
+        });
+        
+        // Add mouse move handler to update aim direction constantly
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            // No specific handling needed here, as the player update will get the position
+            // Just emit an event in case we want to react elsewhere
+            this.eventBus.emit('pointer-moved', {
+                x: pointer.worldX,
+                y: pointer.worldY
+            });
         });
     }
 
@@ -250,7 +292,7 @@ export default class GameScene extends BaseScene {
         return this.entityManager;
     }
 
-    public getRoundManager(): RoundManager {
+    public getRoundManager(): RoundSystem {
         return this.roundManager;
     }
 
@@ -372,10 +414,12 @@ export default class GameScene extends BaseScene {
     }
 
     private togglePause(): void {
-        if (this.scene.isPaused()) {
-            this.scene.resume();
-        } else {
-            this.scene.pause();
+        if (this.gameCoordinator) {
+            if (this.gameState.isInState(GameStateEnum.PAUSED)) {
+                this.gameCoordinator.resumeGame();
+            } else {
+                this.gameCoordinator.pauseGame();
+            }
         }
     }
 
@@ -392,7 +436,59 @@ export default class GameScene extends BaseScene {
         }
 
         if (this.debugMode) {
+            // Count active enemies and report
+            const activeEnemies = this.entityManager.getEnemies().length;
+            console.log(`Debug mode enabled - Active enemies: ${activeEnemies}`);
+            
+            // Report on all physics bodies
+            const bodies = this.physics.world.bodies.entries;
+            console.log(`Total physics bodies: ${bodies.length}`);
+            
+            // Log some info about each body type
+            let enemyBodies = 0;
+            let projectileBodies = 0;
+            let otherBodies = 0;
+            
+            bodies.forEach(body => {
+                const gameObject = body.gameObject;
+                if (gameObject instanceof Enemy) {
+                    enemyBodies++;
+                } else if (gameObject && gameObject.getData && gameObject.getData('type') === 'projectile') {
+                    projectileBodies++;
+                } else {
+                    otherBodies++;
+                }
+            });
+            
+            console.log(`Body types - Enemies: ${enemyBodies}, Projectiles: ${projectileBodies}, Other: ${otherBodies}`);
+            
+            // Add a debug button to force refresh collision detection
+            const refreshButton = this.add.text(
+                this.cameras.main.width - 200,
+                10,
+                'Refresh Collisions',
+                { 
+                    backgroundColor: '#333',
+                    padding: { left: 10, right: 10, top: 5, bottom: 5 },
+                    color: '#fff'
+                }
+            ).setOrigin(0, 0).setScrollFactor(0).setDepth(1000).setName('refresh-collisions-button');
+            
+            refreshButton.setInteractive({ useHandCursor: true });
+            refreshButton.on('pointerdown', () => {
+                console.log("Manual collision refresh triggered");
+                this.combatSystem.recreateColliders();
+            });
+            
             this.showDebugInfo();
+        } else {
+            console.log("Debug mode disabled");
+            
+            // Remove debug button if it exists
+            const oldButton = this.children.getByName('refresh-collisions-button');
+            if (oldButton) {
+                oldButton.destroy();
+            }
         }
     }
 
@@ -413,6 +509,15 @@ export default class GameScene extends BaseScene {
 
                 this.debugGraphics.lineStyle(2, 0xff0000, 0.5);
                 this.debugGraphics.lineBetween(enemy.x, enemy.y, target.x, target.y);
+                
+                // Draw enemy hitbox
+                this.debugGraphics.lineStyle(1, 0xff8800, 0.8);
+                if (enemy.body) {
+                    const body = enemy.body as Phaser.Physics.Arcade.Body;
+                    this.debugGraphics.strokeRect(
+                        body.x, body.y, body.width, body.height
+                    );
+                }
             });
         }
 
@@ -424,6 +529,24 @@ export default class GameScene extends BaseScene {
 
                 this.debugGraphics.lineStyle(2, 0x0000ff, 0.3);
                 this.debugGraphics.strokeCircle(tower.x, tower.y, tower.getCurrentRange());
+            });
+        }
+        
+        // Draw projectile paths
+        const projectiles = this.entityManager.getProjectiles();
+        if (projectiles) {
+            projectiles.getChildren().forEach((proj) => {
+                const projectile = proj as Phaser.Physics.Arcade.Sprite;
+                if (!projectile.active) return;
+                
+                // Draw projectile hitbox
+                this.debugGraphics.lineStyle(1, 0xffff00, 0.8);
+                if (projectile.body) {
+                    const body = projectile.body as Phaser.Physics.Arcade.Body;
+                    this.debugGraphics.strokeRect(
+                        body.x, body.y, body.width, body.height
+                    );
+                }
             });
         }
     }
@@ -561,5 +684,22 @@ export default class GameScene extends BaseScene {
 
     public getTowers(): Phaser.Physics.Arcade.Group | undefined {
         return this.entityManager.getTowers();
+    }
+
+    // Add this new method for toggling game states
+    public changeGameState(state: GameStateEnum): void {
+        if (this.gameCoordinator) {
+            const stateManager = this.gameCoordinator.getGameStateManager();
+            if (state === GameStateEnum.BUILD_PHASE) {
+                stateManager.startNewGame();
+            } else if (state === GameStateEnum.MENU) {
+                stateManager.returnToMenu();
+            } else if (state === GameStateEnum.GAME_OVER) {
+                stateManager.gameOver();
+            } else {
+                // For other states, try direct transition
+                this.gameState.transition(state);
+            }
+        }
     }
 }

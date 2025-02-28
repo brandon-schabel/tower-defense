@@ -4,10 +4,10 @@ import { DIFFICULTY_SETTINGS } from '../settings';
 import { EnemyType } from '../entities/enemy/enemy-type';
 import EntityManager from '../managers/entity-manager';
 import UIManager from '../managers/ui-manager';
-import GameState from '../utils/game-state';
+import GameState, { GameStateEnum } from '../utils/game-state';
 import { EventBus } from '../core/event-bus';
 
-export default class RoundManager {
+export default class RoundSystem {
     private scene: GameScene;
     private roundState: 'build' | 'combat' | 'roundEnd' | 'transitioning' = 'build';
     private enemiesRemaining: number = 0;
@@ -30,6 +30,103 @@ export default class RoundManager {
         this.entityManager = entityManager;
         this.eventBus = eventBus;
         this.gameState = gameState;
+
+        // Register state change handlers
+        this.setupStateHandlers();
+    }
+
+    /**
+     * Setup handlers for game state changes
+     */
+    private setupStateHandlers(): void {
+        // Register handlers for specific game states
+        this.gameState.registerStateHandler(GameStateEnum.BUILD_PHASE, () => {
+            this.onEnterBuildPhase();
+        });
+
+        this.gameState.registerStateHandler(GameStateEnum.COMBAT_PHASE, () => {
+            this.onEnterCombatPhase();
+        });
+
+        this.gameState.registerStateHandler(GameStateEnum.ROUND_END, () => {
+            this.onEnterRoundEndPhase();
+        });
+
+        // Register global state change handler to sync internal roundState
+        this.gameState.registerGlobalStateChangeHandler((prevState, newState) => {
+            this.syncRoundStateWithGameState(newState);
+        });
+    }
+
+    /**
+     * Synchronize internal roundState with the global game state
+     */
+    private syncRoundStateWithGameState(gameState: GameStateEnum): void {
+        switch (gameState) {
+            case GameStateEnum.BUILD_PHASE:
+                this.roundState = 'build';
+                break;
+            case GameStateEnum.COMBAT_PHASE:
+                this.roundState = 'combat';
+                break;
+            case GameStateEnum.ROUND_END:
+                this.roundState = 'roundEnd';
+                break;
+            // For other states, we don't update roundState
+        }
+    }
+
+    /**
+     * Handler for entering the build phase
+     */
+    private onEnterBuildPhase(): void {
+        if (this.roundStateDebug) {
+            console.log('RoundSystem: Entered BUILD_PHASE');
+        }
+        
+        this.isRoundActive = false;
+        this.isRoundEnding = false;
+        
+        // Emit round transition event
+        this.eventBus.emit('round-transition-to-build');
+    }
+
+    /**
+     * Handler for entering the combat phase
+     */
+    private onEnterCombatPhase(): void {
+        if (this.roundStateDebug) {
+            console.log('RoundSystem: Entered COMBAT_PHASE');
+        }
+        
+        this.isRoundActive = true;
+        this.isRoundEnding = false;
+        
+        // Log round start
+        console.log(`Starting round ${this.currentRound}`);
+        
+        // Show round message
+        this.showRoundMessage(`Round ${this.currentRound}`, 0xffff00);
+        
+        // Emit event
+        this.eventBus.emit('round-started', this.currentRound);
+    }
+
+    /**
+     * Handler for entering the round end phase
+     */
+    private onEnterRoundEndPhase(): void {
+        if (this.roundStateDebug) {
+            console.log('RoundSystem: Entered ROUND_END');
+        }
+        
+        this.isRoundEnding = true;
+        
+        // Clear any remaining enemies
+        this.clearRemainingEnemies();
+        
+        // Emit round end event
+        this.eventBus.emit('round-ended', this.currentRound);
     }
 
     /**
@@ -72,28 +169,18 @@ export default class RoundManager {
         // Increment round counter
         this.currentRound++;
         
-        // Update round state
-        this.roundState = 'combat';
-        this.isRoundActive = true;
-        
-        // Log round start
-        console.log(`Starting round ${this.currentRound}`);
-        
-        // Show round message
-        this.showRoundMessage(`Round ${this.currentRound}`, 0xffff00);
+        // Transition to combat phase in game state
+        this.gameState.transition(GameStateEnum.COMBAT_PHASE);
         
         // Setup enemy spawns for this round
         this.setupEnemySpawns();
-        
-        // Update UI
-        this.eventBus.emit('round-started', this.currentRound);
     }
 
     /**
      * Start the next round
      */
     public startNextRound(): void {
-        if (this.roundState !== 'build') {
+        if (!this.gameState.isInState(GameStateEnum.BUILD_PHASE)) {
             console.warn('Cannot start next round: Not in build phase');
             return;
         }
@@ -118,11 +205,8 @@ export default class RoundManager {
             return;
         }
         
-        this.isRoundEnding = true;
-        this.roundState = 'roundEnd';
-        
-        // Clear any remaining enemies
-        this.clearRemainingEnemies();
+        // Transition to round end state
+        this.gameState.transition(GameStateEnum.ROUND_END);
         
         // Calculate round rewards
         const baseReward = 50;
@@ -142,21 +226,9 @@ export default class RoundManager {
         // Show heal message
         this.showHealMessage(healAmount);
         
-        // Emit round end event
-        this.eventBus.emit('round-ended', this.currentRound);
-        
         // Transition to build phase after delay
         this.roundTransitionTimer = this.scene.time.delayedCall(3000, () => {
-            this.roundState = 'build';
-            this.isRoundActive = false;
-            this.isRoundEnding = false;
-            
-            // Emit round transition event
-            this.eventBus.emit('round-transition-to-build');
-            
-            if (this.roundStateDebug) {
-                console.log(`Transitioned to build phase after round ${this.currentRound}`);
-            }
+            this.gameState.transition(GameStateEnum.BUILD_PHASE);
         });
     }
 
@@ -164,7 +236,7 @@ export default class RoundManager {
      * Check if the round is complete
      */
     public checkRoundCompletion(): void {
-        if (this.roundState !== 'combat' || !this.isRoundActive) {
+        if (!this.gameState.isInState(GameStateEnum.COMBAT_PHASE) || !this.isRoundActive) {
             return;
         }
 
@@ -173,6 +245,25 @@ export default class RoundManager {
         if (this.enemiesRemaining <= 0 && enemies && enemies.countActive() === 0) {
             this.handleRoundEnd();
         }
+    }
+
+    /**
+     * Handle game over condition
+     */
+    public handleGameOver(isVictory: boolean = false): void {
+        // Clear any active rounds
+        this.clearRemainingEnemies();
+        
+        if (this.roundTransitionTimer) {
+            this.roundTransitionTimer.destroy();
+            this.roundTransitionTimer = null;
+        }
+        
+        // Transition to game over state
+        this.gameState.transition(GameStateEnum.GAME_OVER);
+        
+        // Emit game over event with victory status
+        this.eventBus.emit('game-over', { isVictory, roundsCompleted: this.currentRound });
     }
 
     /**
@@ -409,5 +500,8 @@ export default class RoundManager {
             this.roundTransitionTimer.destroy();
             this.roundTransitionTimer = null;
         }
+        
+        // Reset to build phase
+        this.gameState.transition(GameStateEnum.BUILD_PHASE);
     }
 }

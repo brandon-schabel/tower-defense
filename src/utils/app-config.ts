@@ -5,7 +5,7 @@ import { GAME_SETTINGS } from "../settings";
 export type GameConfig = typeof GAME_SETTINGS;
 
 // Create and export a pre-configured instance
-export const gameConfig = ConfigManager.getInstance<GameConfig>();
+export const gameConfig = new ConfigManager<GameConfig>();
 
 // Example of accessing a setting (with type safety!)
 

@@ -46,7 +46,10 @@ export default class EntityManager {
         this.entityFactory = new EntityFactory(this.scene, this.tileMapManager, this.eventBus);
         this.enemies = this.scene.physics.add.group();
         this.towers = this.scene.physics.add.group();
-        this.projectiles = this.scene.physics.add.group();
+        this.projectiles = this.scene.physics.add.group({
+            classType: Phaser.Physics.Arcade.Sprite,
+            runChildUpdate: true
+        });
 
         // Set entity manager in factory (to avoid circular dependency)
         this.entityFactory.setEntityManager(this);
@@ -299,31 +302,61 @@ export default class EntityManager {
             this.enemies.add(enemy);
             // Setting target via setter method rather than data
             enemy.setTarget(this.base);
+            
+            // Force a refresh of collision detection when a new enemy is spawned
+            if (this.combatSystem) {
+                // Emit the event to refresh collisions
+                console.log(`Refreshing collisions after spawning enemy ${enemy.id}`);
+                this.eventBus.emit('refresh-collisions', {});
+            }
         }
     }
 
     public createProjectile(x: number, y: number, texture: string): Phaser.Physics.Arcade.Sprite {
         if (!this.projectiles) {
             console.error("Projectiles group not initialized");
-            this.projectiles = this.scene.physics.add.group();
+            this.projectiles = this.scene.physics.add.group({
+                classType: Phaser.Physics.Arcade.Sprite,
+                runChildUpdate: true
+            });
         }
 
         // Create the projectile sprite
         const projectile = this.scene.physics.add.sprite(x, y, texture);
+        
+        // Ensure it has physics enabled
+        if (!projectile.body) {
+            this.scene.physics.world.enable(projectile);
+        }
+        
+        // Add to the group after ensuring it has a body
         this.projectiles.add(projectile);
 
         // Set the origin to 0.5, 0.5 to make rotation work properly around the center
         projectile.setOrigin(0.5, 0.5);
 
         // Store the base values we'll need for consistent scaling
-        const BASE_RADIUS = 65; // Use your known working value
+        const BASE_RADIUS = 8; // Using a smaller radius for better collision detection
         projectile.setData('baseRadius', BASE_RADIUS);
 
-        // Initial hitbox setup
-        projectile.body.setCircle(BASE_RADIUS);
+        // Initial hitbox setup - ensure we're setting a proper circular body
+        if (projectile.body) {
+            projectile.body.setCircle(BASE_RADIUS);
+            
+            // Enable the body for collision detection
+            projectile.body.enable = true;
+            
+            // Set as a sensor (trigger overlap events without physical collision)
+            // projectile.body.isSensor = true;
+        }
 
         projectile.setActive(true);
         projectile.setVisible(true);
+        
+        // Debug identification
+        projectile.setData('id', Math.floor(Math.random() * 10000));
+        projectile.setData('creationTime', this.scene.time.now);
+        
         return projectile;
     }
 
@@ -445,6 +478,29 @@ export default class EntityManager {
             ]);
         } else {
             return EnemyType.Normal;
+        }
+    }
+
+    public removeEnemy(enemy: Enemy): void {
+        if (!this.enemies) return;
+        
+        console.log(`Removing enemy ${enemy.id}, active enemies before removal: ${this.enemies.countActive()}`);
+        
+        // First remove from the group
+        this.enemies.remove(enemy, true, true);
+        
+        // Make sure it's not in the physics system
+        if (enemy.body) {
+            enemy.disableBody(true, true);
+        }
+        
+        // Destroy the enemy after it's removed from the group
+        enemy.destroy();
+
+        // Immediately force a refresh of collision detection
+        if (this.combatSystem) {
+            this.eventBus.emit('refresh-collisions', {});
+            console.log(`Refresh collisions event emitted after enemy ${enemy.id} removal. Active enemies: ${this.enemies ? this.enemies.countActive() : 0}`);
         }
     }
 }

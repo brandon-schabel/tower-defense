@@ -17,10 +17,14 @@ export class InputManager {
         // Initialize key mappings once the scene is ready
         if (this.scene.input?.keyboard) {
             this.initializeKeyMappings();
-        } else {
+        } else if (this.scene.events) {
+            // Only attach to events if it exists
             this.scene.events.once('create', () => {
                 this.initializeKeyMappings();
             });
+        } else {
+            // Fallback: Try to initialize later when the scene might be ready
+            setTimeout(() => this.initializeKeyMappings(), 100);
         }
     }
 
