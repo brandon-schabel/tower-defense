@@ -2,21 +2,20 @@ import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 import InventoryManager from "../managers/inventory-manager";
 import { GameItem, ItemType, WeaponItem, EquipmentItem } from "../types/item";
-import { HealthComponent } from "../utils/health-component";
+import { HealthComponent } from "./components/health-component";
 import { InputManager } from "../managers/input-manger";
-import { ConfigManager } from "../managers/config-manager"; // Import ConfigManager
-import ResearchTree, { ResearchNode } from "../utils/research-tree"; // Import ResearchTree and ResearchNode
+import ResearchTree from "../utils/research-tree"; // Import ResearchTree and ResearchNode
 import { gameConfig } from "../utils/app-config";
-import ServiceLocator from "../utils/service-locator";
-import { EventBus } from "../utils/event-bus";
+import { EventBus } from "../core/event-bus";
 import CombatSystem from "../systems/combat-system";
+import ItemDropManager from "../managers/item-drop-manager";
+import { GAME_SETTINGS } from "../settings";
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
   private healthComponent: HealthComponent;
-  private movementSpeed: number; //  = GAME_SETTINGS.player.movementSpeed; // Use from settings - now set in constructor
-  // private shootRange: number = GAME_SETTINGS.player.shootRange; // Use from settings -  not used directly, getRange() used instead
+  private movementSpeed: number; // Initialized in constructor
   private lastShotTime: number = 0;
-  private shootCooldown: number; // = GAME_SETTINGS.player.shootCooldown; // Use from settings - now set in constructor
+  private shootCooldown: number; // Initialized in constructor
   private speedLevel: number = 0;
   private damageLevel: number = 0;
   private rangeLevel: number = 0;
@@ -33,20 +32,34 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   private activeBuffs: Map<string, { value: number, endTime: number }> = new Map();
   private initialHealth: number;
 
-  private inputManager: InputManager; // Add InputManager
+  private inputManager: InputManager;
 
   private researchTree: ResearchTree;
 
   private eventBus: EventBus;
 
-  constructor(scene: GameScene, x: number, y: number) {
+  private combatSystem: CombatSystem;
+  private itemDropManager: ItemDropManager;
+
+  constructor(
+    scene: GameScene, 
+    x: number, 
+    y: number, 
+    eventBus: EventBus,
+    combatSystem: CombatSystem,
+    itemDropManager: ItemDropManager
+  ) {
     super(scene, x, y, "user");
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setCollideWorldBounds(true);
 
-    // Get ConfigManager instance
+    // Inject dependencies directly
+    this.eventBus = eventBus;
+    this.combatSystem = combatSystem;
+    this.itemDropManager = itemDropManager;
 
+    // Get ConfigManager instance
     // Use ConfigManager to get player settings (initial values)
     this.movementSpeed = (gameConfig.getConfig('player')?.movementSpeed) || -1;
     this.shootCooldown = (gameConfig.getConfig('player')?.shootCooldown) || -1;
@@ -127,12 +140,6 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Make sure max health is properly set after all initialization
     this.getMaxHealth(); // Recalculate max health after research
-
-    // Register with service locator
-    ServiceLocator.getInstance().register('player', this);
-    
-    // Get event bus from service locator
-    this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
   }
 
   update() {
@@ -161,22 +168,20 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.healthComponent.update();
 
     // Debugging item detection:
-    const gameScene = this.scene as GameScene;
-    const itemDropManager = gameScene.getItemDropManager();
-    if (itemDropManager) { // Check if itemDropManager exists
-        const nearbyItem = itemDropManager.getItemInPickupRange(this.x, this.y);
-        console.log('Nearby item:', nearbyItem); // Log nearby item
-        if (this.pickupText) {
-            this.pickupText.setVisible(!!nearbyItem);
-        }
+    if (this.itemDropManager) { // Check if itemDropManager exists
+      const nearbyItem = this.itemDropManager.getItemInPickupRange(this.x, this.y);
+      console.log('Nearby item:', nearbyItem); // Log nearby item
+      if (this.pickupText) {
+        this.pickupText.setVisible(!!nearbyItem);
+      }
     }
   }
 
   heal(amount: number) {
     this.healthComponent.heal(amount);
     this.eventBus.emit('player-healed', {
-        amount: amount,
-        newHealth: this.healthComponent.getHealth()
+      amount: amount,
+      newHealth: this.healthComponent.getHealth()
     });
   }
 
@@ -188,8 +193,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.active) return; // Exit if the user is already destroyed
     this.healthComponent.takeDamage(damage);
     this.eventBus.emit('player-damaged', {
-        damage: damage,
-        remainingHealth: this.healthComponent.getHealth()
+      damage: damage,
+      remainingHealth: this.healthComponent.getHealth()
     });
   }
 
@@ -262,16 +267,13 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     // Update last shot time.  Moved from handleShooting()
     this.lastShotTime = (this.scene as GameScene).time.now;
 
-    const combatSystem = ServiceLocator.getInstance().get<CombatSystem>('combatSystem');
-    if (combatSystem) {
-        combatSystem.shootProjectile(
-            this,
-            worldPoint.x,
-            worldPoint.y,
-            damage,
-            projectileType
-        );
-    }
+    this.combatSystem.shootProjectile(
+      this,
+      worldPoint.x,
+      worldPoint.y,
+      damage,
+      projectileType
+    );
   }
 
   // Apply research effects to movement speed
@@ -285,8 +287,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Add equipment bonuses
     this.equippedItems.forEach(item => {
-      if (item.stats.speedBonus) {
-        equipmentBonus += item.stats.speedBonus;
+      if (item.properties && item.properties.speedBonus) {
+        equipmentBonus += item.properties.speedBonus;
       }
     });
 
@@ -299,21 +301,30 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
+    // Apply any active buffs
+    if (this.activeBuffs.has('speed')) {
+      const buff = this.activeBuffs.get('speed');
+      if (buff) {
+        baseSpeed *= buff.value;
+      }
+    }
+
     return baseSpeed * (1 + equipmentBonus);
   }
 
   // Apply research effects to damage
   public getDamage(): number {
-    let baseDamage = (gameConfig.getConfig('player')?.projectileDamage) || -1;
+    // Base damage + upgrade bonus
+    let baseDamage = GAME_SETTINGS.player.damage;  // Use damage instead of projectileDamage
+    
+    // Add damage level bonus (15% per level)
+    baseDamage += (baseDamage * 0.15 * this.damageLevel);
+    
     let equipmentBonus = 0;
 
-    if (baseDamage === -1) {
-      console.error('Base damage not found in game config');
-    }
-
     this.equippedItems.forEach(item => {
-      if (item.stats.damageBonus) {
-        equipmentBonus += item.stats.damageBonus;
+      if (item.properties && item.properties.damageBonus) {
+        equipmentBonus += item.properties.damageBonus;
       }
     });
 
@@ -349,17 +360,14 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
   // Apply research effects to range
   public getRange(): number {
-    // Use weapon range if available
-    if (this.equippedWeapon?.range) {
-      return this.equippedWeapon.range;
-    }
-
-    let baseRange = (gameConfig.getConfig('player')?.shootRange) || -1;
+    // Base range + upgrade bonus
+    let range = GAME_SETTINGS.player.attackRange;  // Use attackRange instead of shootRange
+    
     let equipmentBonus = 0;
 
     this.equippedItems.forEach(item => {
-      if (item.stats.rangeBonus) {
-        equipmentBonus += item.stats.rangeBonus;
+      if (item.properties && item.properties.rangeBonus) {
+        equipmentBonus += item.properties.rangeBonus;
       }
     });
 
@@ -368,11 +376,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     if (playerRangeLevel > 0) {
       const node = this.researchTree.getResearchNode('player_range');
       if (node && node.effects && node.effects.playerRangeMultiplier) {
-        baseRange *= (1 + node.effects.playerRangeMultiplier * playerRangeLevel);
+        range *= (1 + node.effects.playerRangeMultiplier * playerRangeLevel);
       }
     }
 
-    return baseRange + equipmentBonus;
+    return range + equipmentBonus;
   }
 
   // Apply research effects to max health
@@ -381,8 +389,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     let equipmentBonus = 0;
 
     this.equippedItems.forEach(item => {
-      if (item.stats.healthBonus) {
-        equipmentBonus += item.stats.healthBonus;
+      if (item.properties && item.properties.healthBonus) {
+        equipmentBonus += item.properties.healthBonus;
       }
     });
 
@@ -444,7 +452,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.inventory.removeItemFromSlot(this.inventory.findItem(item.name))) {
       this.equippedItems.set(slot, equipmentItem);
       // Apply item stats
-      this.applyItemStats(equipmentItem.stats);
+      this.applyItemStats(equipmentItem.properties);
+      this.updateAppearance();
     }
   }
 
@@ -453,7 +462,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     if (item) {
       this.equippedItems.delete(slot);
       // Remove item stats
-      this.removeItemStats(item.stats);
+      this.removeItemStats(item.properties);
 
       // Add back to inventory, if there's space
       if (!this.inventory.addItem(item)) {
@@ -461,6 +470,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         // this.dropItem(item); // Example drop function
         console.warn("Inventory full, item dropped!");
       }
+      this.updateAppearance();
     }
   }
 
@@ -470,12 +480,13 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
   // You'll need to implement these based on your game's mechanics
   private applyItemStats(stats: any) {
-    // Example:
+    // Apply various stat bonuses from the item
     if (stats.healthBonus) {
-      // this.maxHealth += stats.healthBonus; // Assuming you have maxHealth
-      // this.health += stats.healthBonus;    // and health properties
+      this.healthComponent.setMaxHealth(this.getMaxHealth());
     }
-    // ... apply other stats ...
+    
+    // Update appearance when stats change
+    this.updateAppearance();
   }
 
   private removeItemStats(stats: any) {
@@ -499,31 +510,31 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.clearTint();
 
     // Apply visual effects from equipment
-    let hasArmor = false;
-    let hasWeapon = false;
-    let hasHelmet = false;
+    // Track equipped items by slot
+    const hasArmor = this.equippedItems.has('armor');
+    const hasWeapon = this.equippedItems.has('weapon');
+    const hasHelmet = this.equippedItems.has('helmet');
 
     this.equippedItems.forEach(item => {
       switch (item.slot) {
         case 'armor':
-          hasArmor = true;
           // Color the center of the player based on armor tier
-          switch (item.tier) {
-            case 1: this.setTint(0x8B8B8B); break; // Iron
-            case 2: this.setTint(0xFFD700); break; // Gold
-            case 3: this.setTint(0x00BFFF); break; // Diamond
-            case 4: this.setTint(0xFF4500); break; // Mythical
-            case 5: this.setTint(0xFF00FF); break; // Legendary
+          if (item.tier) {
+            switch (item.tier) {
+              case 1: this.setTint(0x8B8B8B); break; // Iron
+              case 2: this.setTint(0xFFD700); break; // Gold
+              case 3: this.setTint(0x00BFFF); break; // Diamond
+              case 4: this.setTint(0xFF4500); break; // Mythical
+              case 5: this.setTint(0xFF00FF); break; // Legendary
+            }
           }
           break;
 
         case 'weapon':
-          hasWeapon = true;
           // Change projectile appearance later
           break;
 
         case 'helmet':
-          hasHelmet = true;
           // Add a helmet sprite as a child
           break;
       }
@@ -537,30 +548,29 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
    */
   private handleItemPickup(): void {
     try { // Add try-catch for error handling
-        const gameScene = this.scene as GameScene;
-        const itemDropManager = gameScene.getItemDropManager();
+      if (!this.itemDropManager) return;
 
-        if (!itemDropManager) return;
+      const nearbyItem = this.itemDropManager.getItemInPickupRange(this.x, this.y);
+      console.log('Attempting pickup of:', nearbyItem); // Log attempted pickup
 
-        const nearbyItem = itemDropManager.getItemInPickupRange(this.x, this.y);
-        console.log('Attempting pickup of:', nearbyItem); // Log attempted pickup
-
-        if (nearbyItem) {
-            const added = this.addItemToInventory(nearbyItem.item, nearbyItem.quantity);
-            if (added) {
-                itemDropManager.removeItem(nearbyItem);
-                gameScene.showPickupMessage(`Picked up ${nearbyItem.quantity}x ${nearbyItem.item.name}`);
-            } else { // Add else for inventory full
-                gameScene.showPickupMessage("Inventory full!");
-            }
+      if (nearbyItem) {
+        const added = this.addItemToInventory(nearbyItem.item, nearbyItem.quantity);
+        if (added) {
+          this.itemDropManager.removeItem(nearbyItem);
+          const gameScene = this.scene as GameScene;
+          gameScene.showPickupMessage(`Picked up ${nearbyItem.quantity}x ${nearbyItem.item.name}`);
+        } else { // Add else for inventory full
+          const gameScene = this.scene as GameScene;
+          gameScene.showPickupMessage("Inventory full!");
         }
+      }
 
-        // Update pickup text visibility
-        if (this.pickupText) {
-            this.pickupText.setVisible(!!nearbyItem);
-        }
+      // Update pickup text visibility
+      if (this.pickupText) {
+        this.pickupText.setVisible(!!nearbyItem);
+      }
     } catch (error) {
-        console.error("Error in handleItemPickup:", error); // Log any errors
+      console.error("Error in handleItemPickup:", error); // Log any errors
     }
   }
 

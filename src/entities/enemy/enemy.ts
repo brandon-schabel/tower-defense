@@ -1,13 +1,17 @@
 import Phaser from "phaser";
-import GameScene from "../scenes/game-scene";
-import { HealthComponent } from "./components/health-component";
-import { EnemyType } from "./enemy/enemy-type";
-import Player from "./player/player";
-import Tower from "./tower/tower";
-import Base from "./base/base";
-import { EventBus } from "../core/event-bus";
-import ItemDropManager from "../managers/item-drop-manager";
-import CombatSystem from "../systems/combat-system";
+import GameScene from "../../scenes/game-scene";
+import { HealthComponent } from "../components/health-component";
+import { EnemyType } from "./enemy-type";
+import Player from "../player/player";
+import Tower from "../tower/tower";
+import Base from "../base/base";
+import { EventBus } from "../../core/event-bus";
+import ItemDropManager from "../../managers/item-drop-manager";
+import CombatSystem from "../../systems/combat-system";
+import EntityManager from "../../managers/entity-manager";
+import { MovementComponent } from "../components/movement-component";
+import TileMapManager from "../../managers/tile-map-manager";
+import { GAME_SETTINGS } from "../../settings";
 
 export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     private healthComponent: HealthComponent;
@@ -24,10 +28,13 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     private specialAbilities: Map<string, any> = new Map();
     private lastAbilityUse: Map<string, number> = new Map();
     private eventBus: EventBus;
-    private combatSystem: CombatSystem;
     private itemDropManager: ItemDropManager;
-    private player: Player | null = null;
-    private base: Base | null = null;
+    private combatSystem: CombatSystem;
+    private entityManager: EntityManager;
+    private gameScene: GameScene;
+    private movementComponent: MovementComponent | null = null;
+    private tileMapManager: TileMapManager;
+    private currentTarget: Phaser.GameObjects.GameObject | null = null;
 
     constructor(
         scene: GameScene, 
@@ -37,10 +44,10 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         speed: number, 
         onDeath: () => void, 
         eventBus: EventBus,
-        combatSystem: CombatSystem,
         itemDropManager: ItemDropManager,
-        player: Player | null = null,
-        base: Base | null = null,
+        combatSystem: CombatSystem,
+        entityManager: EntityManager,
+        tileMapManager: TileMapManager,
         type: EnemyType = EnemyType.Basic, 
         tier: number = 1
     ) {
@@ -51,12 +58,12 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         scene.add.existing(this);
         scene.physics.add.existing(this);
 
-        // Inject dependencies directly instead of using ServiceLocator
+        this.gameScene = scene;
         this.eventBus = eventBus;
-        this.combatSystem = combatSystem;
         this.itemDropManager = itemDropManager;
-        this.player = player;
-        this.base = base;
+        this.combatSystem = combatSystem;
+        this.entityManager = entityManager;
+        this.tileMapManager = tileMapManager;
 
         this.healthComponent = new HealthComponent(
             this,
@@ -89,7 +96,8 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.enemyType = type;
         this.tier = tier;
         
-        // Service locator registration removed
+        // Initialize movement component with the injected tileMapManager
+        this.movementComponent = new MovementComponent(this, scene, tileMapManager, speed);
     }
 
     public addSpecialAbility(type: string, data: any) {
@@ -101,6 +109,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.healthComponent.update();
 
         const currentTime = this.scene.time.now;
+
         this.setData('type', this.enemyType);
 
         this.specialAbilities.forEach((data, type) => {
@@ -114,7 +123,6 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     private useAbility(type: string, data: any) {
-        // Use injected combatSystem directly
         switch (type) {
             case 'ranged':
                 const target = this.findTarget(data.range);
@@ -134,52 +142,44 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
                         target.takeDamage(data.damage);
                     }
                 });
-
-                const circle = this.scene.add.circle(this.x, this.y, data.range, 0xff0000, 0.3);
-                this.scene.tweens.add({
-                    targets: circle,
-                    alpha: 0,
-                    duration: 500,
-                    onComplete: () => circle.destroy()
-                });
-                break;
-
-            case 'summon':
-                console.warn('Enemy summon ability not implemented - getEnemyFactory missing');
                 break;
         }
     }
 
     private findTarget(range: number): Phaser.Physics.Arcade.Sprite | null {
-        // Use injected player and base directly
-        const towers: Phaser.Physics.Arcade.Sprite[] = [];
+        const player = this.entityManager.getUser();
+        const base = this.entityManager.getBase();
+        
+        // Get towers from entity manager
+        const towerGroup = this.entityManager.getTowers();
+        const towers = towerGroup ? towerGroup.getChildren() : [];
 
         let closestTarget: Phaser.Physics.Arcade.Sprite | null = null;
         let closestDistance = range;
 
-        if (this.player) {
-            const distToPlayer = Phaser.Math.Distance.Between(this.x, this.y, this.player.x, this.player.y);
-            if (distToPlayer < closestDistance) {
-                closestTarget = this.player;
-                closestDistance = distToPlayer;
-            }
+        // Check distance to player
+        const distToPlayer = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+        if (distToPlayer < closestDistance) {
+            closestTarget = player;
+            closestDistance = distToPlayer;
         }
 
-        towers.forEach((tower: Phaser.Physics.Arcade.Sprite) => {
-            const dist = Phaser.Math.Distance.Between(this.x, this.y, tower.x, tower.y);
-            if (dist < closestDistance) {
+        // Check distance to base
+        const distToBase = Phaser.Math.Distance.Between(this.x, this.y, base.x, base.y);
+        if (distToBase < closestDistance) {
+            closestTarget = base;
+            closestDistance = distToBase;
+        }
+
+        // Check distance to each tower
+        towers.forEach(towerObj => {
+            const tower = towerObj as Phaser.Physics.Arcade.Sprite;
+            const distToTower = Phaser.Math.Distance.Between(this.x, this.y, tower.x, tower.y);
+            if (distToTower < closestDistance) {
                 closestTarget = tower;
-                closestDistance = dist;
+                closestDistance = distToTower;
             }
         });
-
-        if (this.base) {
-            const distToBase = Phaser.Math.Distance.Between(this.x, this.y, this.base.x, this.base.y);
-            if (distToBase < closestDistance) {
-                closestTarget = this.base;
-                closestDistance = distToBase;
-            }
-        }
 
         return closestTarget;
     }
@@ -187,14 +187,28 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     private findTargetsInRadius(radius: number): Phaser.Physics.Arcade.Sprite[] {
         const targets: Phaser.Physics.Arcade.Sprite[] = [];
         
-        // Use injected player and base directly
-        if (this.player && Phaser.Math.Distance.Between(this.x, this.y, this.player.x, this.player.y) <= radius) {
-            targets.push(this.player);
+        const player = this.entityManager.getUser();
+        const base = this.entityManager.getBase();
+        const towerGroup = this.entityManager.getTowers();
+        const towers = towerGroup ? towerGroup.getChildren() : [];
+
+        // Check if player is in radius
+        if (player && Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) <= radius) {
+            targets.push(player);
         }
 
-        if (this.base && Phaser.Math.Distance.Between(this.x, this.y, this.base.x, this.base.y) <= radius) {
-            targets.push(this.base);
+        // Check if base is in radius
+        if (base && Phaser.Math.Distance.Between(this.x, this.y, base.x, base.y) <= radius) {
+            targets.push(base);
         }
+
+        // Check if any towers are in radius
+        towers.forEach(towerObj => {
+            const tower = towerObj as Phaser.Physics.Arcade.Sprite;
+            if (Phaser.Math.Distance.Between(this.x, this.y, tower.x, tower.y) <= radius) {
+                targets.push(tower);
+            }
+        });
 
         return targets;
     }
@@ -242,7 +256,6 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     private handleDropsOnDeath(): void {
-        // Use injected itemDropManager directly
         if (!this.itemDropManager) return;
 
         this.itemDropManager.dropRandomItem(this.x, this.y);
@@ -264,7 +277,10 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
                         ticks++;
                     } else {
                         this.isBurning = false;
-                        if (this.burnTimer) this.burnTimer.remove();
+                        if (this.burnTimer) {
+                            this.burnTimer.remove();
+                            this.burnTimer = null;
+                        }
                     }
                 },
                 loop: true
@@ -304,9 +320,49 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         super.destroy(fromScene);
     }
 
-    // Method to update player and base references if they change
-    public updateReferences(player: Player | null, base: Base | null): void {
-        this.player = player;
-        this.base = base;
+    setTarget(target: Phaser.GameObjects.GameObject): void {
+        this.currentTarget = target;
+        
+        if (this.movementComponent) {
+            this.movementComponent.moveToObject(target);
+        }
+    }
+
+    getTarget(): Phaser.GameObjects.GameObject | null {
+        return this.currentTarget;
+    }
+
+    createMovementComponent(speed: number): void {
+        if (!this.movementComponent) {
+            this.movementComponent = new MovementComponent(
+                this, 
+                this.gameScene, 
+                this.tileMapManager,
+                speed
+            );
+        }
+    }
+
+    moveToTarget(targetX: number, targetY: number): void {
+        if (this.movementComponent) {
+            this.movementComponent.moveTo(targetX, targetY);
+        }
+    }
+
+    onPathfindingComplete(success: boolean): void {
+        if (!success) {
+            // If pathfinding failed, try again with a random position around the target
+            const jitter = 32 * 3; // 3 tiles worth of jitter
+            if (this.currentTarget) {
+                // Cast to any to access x and y properties
+                const target = this.currentTarget as any;
+                const targetX = target.x + (Math.random() * jitter * 2 - jitter);
+                const targetY = target.y + (Math.random() * jitter * 2 - jitter);
+                
+                if (this.movementComponent) {
+                    this.movementComponent.moveTo(targetX, targetY);
+                }
+            }
+        }
     }
 }

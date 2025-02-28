@@ -1,10 +1,9 @@
 // src/entities/power-up.ts
 import Phaser from "phaser";
-import GameScene from "../scenes/game-scene";
-import ServiceLocator from "../utils/service-locator";
-import Player from "./player";
-import GameState from "../utils/game-state";
-import { EventBus } from "../utils/event-bus";
+import GameScene from "../../scenes/game-scene";
+import Player from "../player/player";
+import GameState from "../../utils/game-state";
+import { EventBus } from "../../core/event-bus";
 
 export enum PowerUpType {
     AttackSpeed = 'attack-speed',
@@ -20,10 +19,20 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
     private duration: number; // in milliseconds
     private value: number;
     private eventBus: EventBus;
+    private player: Player;
+    private gameState: GameState;
     private static nextId: number = 0;
     private id: number;
     
-    constructor(scene: GameScene, x: number, y: number, type: PowerUpType) {
+    constructor(
+        scene: GameScene, 
+        x: number, 
+        y: number, 
+        type: PowerUpType, 
+        eventBus: EventBus,
+        player: Player,
+        gameState: GameState
+    ) {
         // Choose texture based on power-up type
         let texture = 'powerup-default';
         switch (type) {
@@ -39,7 +48,9 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
         
         this.powerUpType = type;
         this.id = PowerUp.nextId++;
-        this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
+        this.eventBus = eventBus;
+        this.player = player;
+        this.gameState = gameState;
         
         // Set duration and value based on type
         switch (type) {
@@ -100,36 +111,30 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
                 this.destroy();
             }
         });
-        
-        // Register with service locator
-        ServiceLocator.getInstance().register(`powerup_${this.id}`, this);
     }
     
     private onPickup() {
-        const player = ServiceLocator.getInstance().get<Player>('player');
-        const gameState = ServiceLocator.getInstance().get<GameState>('gameState');
-        
-        if (!player) return;
+        if (!this.player) return;
         
         switch (this.powerUpType) {
             case PowerUpType.AttackSpeed:
-                player.addTemporaryBuff('attackSpeed', this.value, this.duration);
+                this.player.addTemporaryBuff('attackSpeed', this.value, this.duration);
                 break;
             case PowerUpType.Damage:
-                player.addTemporaryBuff('damage', this.value, this.duration);
+                this.player.addTemporaryBuff('damage', this.value, this.duration);
                 break;
             case PowerUpType.Range:
-                player.addTemporaryBuff('range', this.value, this.duration);
+                this.player.addTemporaryBuff('range', this.value, this.duration);
                 break;
             case PowerUpType.Health:
-                player.heal(this.value);
+                this.player.heal(this.value);
                 break;
             case PowerUpType.Invincibility:
-                player.addTemporaryBuff('invincible', this.value, this.duration);
+                this.player.addTemporaryBuff('invincible', this.value, this.duration);
                 break;
             case PowerUpType.Resources:
-                if (gameState) {
-                    gameState.earnResources(this.value);
+                if (this.gameState) {
+                    this.gameState.earnResources(this.value);
                 }
                 break;
         }

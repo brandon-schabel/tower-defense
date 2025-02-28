@@ -1,14 +1,16 @@
-import Tower from "../entities/tower";
+import Tower from "../entities/tower/tower";
 import GameScene from "../scenes/game-scene";
 import { GAME_SETTINGS, TowerType } from "../settings";
-import { EquipmentItem, GameItem } from "../types/item";
+import { EquipmentItem, GameItem, ItemRarity } from "../types/item";
 
 // New enums
 enum ItemSlot {
   Weapon = 'weapon',
-  Helmet = 'helmet',
+  Head = 'head',
+  Body = 'body',
+  Accessory = 'accessory',
   Armor = 'armor',
-  Accessory = 'accessory'
+  Helmet = 'helmet'
 }
 
 enum ResearchCategory {
@@ -39,6 +41,13 @@ interface InventoryItem {
   tier: number;
   slot: ItemSlot;
   stats: ItemStats;
+  rarity: ItemRarity;
+  properties?: {
+    healthBonus?: number;
+    speedBonus?: number;
+    damageBonus?: number;
+    rangeBonus?: number;
+  };
 }
 
 interface ResearchNode {
@@ -336,8 +345,8 @@ export default class HUD {
       const button = document.createElement('button');
       button.className = 'tower-button';
       button.innerHTML = `
-        <img src="/assets/${data.texture}.svg" alt="${data.name}" />
-        <span class="price">${data.price}</span>
+        <img src="/assets/${(data as any).texture}.svg" alt="${(data as any).name}" />
+        <span class="price">${(data as any).price}</span>
       `;
       button.addEventListener('click', () => this.gameScene.enterBuildMode(type as TowerType));
       this.towerButtons.appendChild(button);
@@ -384,7 +393,7 @@ export default class HUD {
     equippedSection.innerHTML = '<h3>Equipped</h3>';
 
     // Create slots for equipped items
-    const slots = [ItemSlot.Weapon, ItemSlot.Helmet, ItemSlot.Armor, ItemSlot.Accessory];
+    const slots = [ItemSlot.Weapon, ItemSlot.Head, ItemSlot.Body, ItemSlot.Accessory];
 
     slots.forEach(slot => {
       const slotDiv = document.createElement('div');
@@ -393,11 +402,11 @@ export default class HUD {
       const item = equippedItems.get(slot) as EquipmentItem | undefined;
       if (item) {
         slotDiv.innerHTML = `
-          <img src="/assets/${item.texture || 'item-default'}.svg" alt="${item.name}" />
+          <img src="/assets/${item.properties?.texture || 'item-default'}.svg" alt="${item.name}" />
           <div class="item-tooltip">
             <h4>${item.name}</h4>
             <p>${item.description || ''}</p>
-            <p class="item-stats">${this.formatItemStats(item.stats)}</p>
+            <p class="item-stats">${this.formatItemStats(item.properties || {})}</p>
           </div>
         `;
         slotDiv.addEventListener('click', () => this.gameScene.unequipItem(item.slot));
@@ -423,7 +432,7 @@ export default class HUD {
         <div class="item-tooltip">
           <h4>${item.name || 'Unknown Item'}</h4>
           <p>${item.description || ''}</p>
-          <p class="item-stats">${this.formatItemStats(item.stats || {})}</p>
+          <p class="item-stats">${this.formatItemStats(item.properties || {})}</p>
         </div>
       `;
 
@@ -448,7 +457,7 @@ export default class HUD {
     inventoryContainer.appendChild(closeButton);
   }
 
-  private formatItemStats(stats: ItemStats): string {
+  private formatItemStats(stats: any): string {
     const statLines = [];
 
     if (stats.healthBonus) {
@@ -589,16 +598,16 @@ export default class HUD {
   updateResources() {
     const resources = this.gameScene.getGameState().getResources();
     this.resourcesDisplay.textContent = `Resources: ${resources}`;
-    console.log(`HUD updated. Resources: ${resources}`);
-
-    this.towerButtons.querySelectorAll('.tower-button').forEach((button) => {
+    
+    // Update tower buttons based on available resources
+    Array.from(this.towerButtons.children).forEach(button => {
       const buttonEl = button as HTMLButtonElement;
       const towerName = buttonEl.querySelector('img')?.alt || '';
-      const towerType = Object.keys(GAME_SETTINGS.towers).find(
-        towerType => GAME_SETTINGS.towers[towerType as TowerType].name === towerName
+      const towerTypeKey = Object.keys(GAME_SETTINGS.towers).find(
+        key => (GAME_SETTINGS.towers[key as TowerType] as any).name === towerName
       );
-      if (towerType) {
-        const price = GAME_SETTINGS.towers[towerType as TowerType].price;
+      if (towerTypeKey) {
+        const price = (GAME_SETTINGS.towers[towerTypeKey as TowerType] as any).price;
         buttonEl.disabled = resources < price;
       }
     });

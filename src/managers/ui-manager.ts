@@ -1,32 +1,60 @@
 import GameScene from "../scenes/game-scene";
 import HUD from "../ui/hud";
 import InventoryUI from "../ui/inventory-ui";
-import Tower from "../entities/tower";
-import ServiceLocator from "../utils/service-locator";
-import Player from "../entities/player";
+import Tower from "../entities/tower/tower";
 import EntityManager from "./entity-manager";
+import { EventBus } from "../core/event-bus";
 
 export default class UIManager {
     private scene: GameScene;
     private hud: HUD;
     private inventoryUI: InventoryUI;
     private isInventoryVisible: boolean = false;
+    private entityManager: EntityManager;
+    private eventBus: EventBus;
     
-    constructor(scene: GameScene) {
+    constructor(scene: GameScene, entityManager: EntityManager, eventBus: EventBus) {
         this.scene = scene;
+        this.entityManager = entityManager;
+        this.eventBus = eventBus;
         
         // Initialize UI components
         this.hud = new HUD(scene);
         
         // Get player from entity manager
-        const entityManager = ServiceLocator.getInstance().get<EntityManager>('entityManager');
-        const player = entityManager ? entityManager.getUser() : scene.getUser();
+        const player = this.entityManager.getUser();
         
-        this.inventoryUI = new InventoryUI(scene, player.getInventory());
+        // Initialize inventory UI with player's inventory if player exists
+        if (player) {
+            this.inventoryUI = new InventoryUI(scene, player.getInventory());
+        } else {
+            // Create a default inventory UI with null inventory
+            console.warn("Player not found when initializing UI. Using default inventory.");
+            this.inventoryUI = new InventoryUI(scene, null);
+        }
         this.inventoryUI.hide();
         
-        // Register with service locator
-        ServiceLocator.getInstance().register('uiManager', this);
+        // Set up event listeners
+        this.setupEventListeners();
+    }
+    
+    private setupEventListeners(): void {
+        this.eventBus.on('tower-selected', (tower: Tower) => {
+            this.updateTowerStats(tower);
+        });
+        
+        this.eventBus.on('tower-deselected', () => {
+            this.updateTowerStats(null);
+        });
+        
+        this.eventBus.on('tower-upgraded', (tower: Tower) => {
+            this.updateTowerStats(tower);
+            this.updateResources();
+        });
+        
+        this.eventBus.on('resources-changed', () => {
+            this.updateResources();
+        });
     }
     
     public getHUD(): HUD {

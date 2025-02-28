@@ -1,10 +1,8 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import Tower from "../entities/tower";
-import { gameConfig } from "../utils/app-config";
-import { GAME_SETTINGS } from "../settings";
-import ServiceLocator from "../utils/service-locator";
-import TileMapManager from "./tile-map-manager";
+import Tower from "../entities/tower/tower";
+import { EventBus } from "../core/event-bus";
+import EntityManager from "./entity-manager";
 import GameState from "../utils/game-state";
 import UIManager from "./ui-manager";
 
@@ -13,83 +11,85 @@ export default class TowerManager {
     private selectedTower: Tower | null = null;
     private upgradePanel: Phaser.GameObjects.Container | null = null;
     private rangeCircle: Phaser.GameObjects.Graphics | null = null;
+    private entityManager: EntityManager;
+    private eventBus: EventBus;
+    private gameState: GameState;
 
-    constructor(scene: GameScene) {
+    constructor(
+        scene: GameScene,
+        entityManager: EntityManager,
+        eventBus: EventBus,
+        gameState: GameState
+    ) {
         this.scene = scene;
-        
-        // Register with service locator
-        ServiceLocator.getInstance().register('towerManager', this);
+        this.entityManager = entityManager;
+        this.eventBus = eventBus;
+        this.gameState = gameState;
     }
 
     public selectTower(tower: Tower): void {
+        // Deselect current tower if any
+        this.deselectTower();
+        
         this.selectedTower = tower;
         
-        const uiManager = ServiceLocator.getInstance().get<UIManager>('uiManager');
-        if (uiManager) {
-            uiManager.updateTowerStats(tower);
-        }
+        // Show range indicator
+        this.rangeCircle = this.scene.add.graphics();
+        this.rangeCircle.lineStyle(2, 0x00ff00, 0.5);
+        this.rangeCircle.strokeCircle(tower.x, tower.y, tower.getCurrentRange());
         
-        this.showUpgradePanel(tower);
-        this.showRangeCircle(tower);
+        // Emit event for UI updates
+        this.eventBus.emit('tower-selected', tower);
     }
-
+    
     public deselectTower(): void {
-        if (this.rangeCircle) {
-            this.rangeCircle.destroy();
-            this.rangeCircle = null;
-        }
-        this.selectedTower = null;
-        
-        const uiManager = ServiceLocator.getInstance().get<UIManager>('uiManager');
-        if (uiManager) {
-            uiManager.updateTowerStats(null);
-        }
-        
-        if (this.upgradePanel) {
-            this.upgradePanel.destroy();
-            this.upgradePanel = null;
+        if (this.selectedTower) {
+            // Remove range indicator
+            if (this.rangeCircle) {
+                this.rangeCircle.destroy();
+                this.rangeCircle = null;
+            }
+            
+            // Emit event for UI updates
+            this.eventBus.emit('tower-deselected');
+            
+            this.selectedTower = null;
         }
     }
-
+    
     public getSelectedTower(): Tower | null {
         return this.selectedTower;
     }
-
-    private showRangeCircle(tower: Tower): void {
-        if (this.rangeCircle) {
-            this.rangeCircle.destroy();
-        }
-        this.rangeCircle = this.scene.add.graphics();
-        this.rangeCircle.lineStyle(2, 0xffffff, 0.5);
-        this.rangeCircle.strokeCircle(tower.x, tower.y, tower.getCurrentRange());
-    }
-
+    
     public findTowerAt(x: number, y: number): Tower | null {
-        const towers = this.scene.getEntityManager().getTowers();
+        const towers = this.entityManager.getTowers();
         if (!towers) return null;
-
+        
         let result: Tower | null = null;
-
-        (towers.getChildren() as Phaser.Physics.Arcade.Sprite[]).forEach(sprite => {
-            const tower = sprite as Tower;
+        const maxDistance = 50; // Maximum distance to consider a tower "clicked"
+        
+        towers.getChildren().forEach((towerObj) => {
+            const tower = towerObj as Tower;
             const distance = Phaser.Math.Distance.Between(x, y, tower.x, tower.y);
-
-            const towerType = tower.getTowerType();
-
-            const towerConfigs = gameConfig.getConfig('towers') ?? GAME_SETTINGS.towers;
-            const towerData = towerConfigs?.[towerType];
-            
-            const tileMapManager = ServiceLocator.getInstance().get<TileMapManager>('tileMapManager');
-            const tileSize = tileMapManager?.getTileSize() || 32;
-            
-            const hitSize = Math.max(towerData.size.width, towerData.size.height) * tileSize / 2;
-
-            if (distance < hitSize) {
+            if (distance < maxDistance) {
                 result = tower;
             }
         });
-
+        
         return result;
+    }
+    
+    public update(): void {
+        // Update range indicator if tower is selected
+        if (this.selectedTower && this.rangeCircle) {
+            this.rangeCircle.clear();
+            this.rangeCircle.lineStyle(2, 0x00ff00, 0.5);
+            this.rangeCircle.strokeCircle(
+                this.selectedTower.x, 
+                this.selectedTower.y, 
+                this.selectedTower.getCurrentRange()
+            );
+        }
     }
 
     private showUpgradePanel(tower: Tower): void {
@@ -122,8 +122,7 @@ export default class TowerManager {
             tierButton.on('pointerover', () => tierButton.setStyle({ color: '#ffff00' }));
             tierButton.on('pointerout', () => tierButton.setStyle({ color: '#ffa500' }));
 
-            const gameState = ServiceLocator.getInstance().get<GameState>('gameState');
-            if (!gameState || !gameState.canAfford(tierCost)) {
+            if (!this.gameState || !this.gameState.canAfford(tierCost)) {
                 tierButton.setStyle({ color: '#888888' });
                 tierButton.disableInteractive();
             }
@@ -157,8 +156,7 @@ export default class TowerManager {
             button.on('pointerover', () => button.setStyle({ color: '#ffff00' }));
             button.on('pointerout', () => button.setStyle({ color: '#ffffff' }));
 
-            const gameState = ServiceLocator.getInstance().get<GameState>('gameState');
-            if (level >= tower.getMaxUpgradeLevel() || !gameState || !gameState.canAfford(cost)) {
+            if (level >= tower.getMaxUpgradeLevel() || !this.gameState || !this.gameState.canAfford(cost)) {
                 button.setStyle({ color: '#888888' });
                 button.disableInteractive();
             }
@@ -183,8 +181,7 @@ export default class TowerManager {
                 button.on('pointerover', () => button.setStyle({ color: '#ffffff' }));
                 button.on('pointerout', () => button.setStyle({ color: power.color }));
 
-                const gameState = ServiceLocator.getInstance().get<GameState>('gameState');
-                if (!gameState || !gameState.canAfford(500)) {
+                if (!this.gameState || !this.gameState.canAfford(500)) {
                     button.setStyle({ color: '#888888' });
                     button.disableInteractive();
                 }
@@ -232,10 +229,9 @@ export default class TowerManager {
 
     private tierUpgradeTower(tower: Tower): void {
         const cost = tower.getTierUpgradeCost();
-        const gameState = ServiceLocator.getInstance().get<GameState>('gameState');
 
-        if (gameState && gameState.canAfford(cost)) {
-            if (gameState.spendResources(cost)) {
+        if (this.gameState && this.gameState.canAfford(cost)) {
+            if (this.gameState.spendResources(cost)) {
                 tower.upgradeTier();
 
                 this.showUpgradePanel(tower);
@@ -257,49 +253,24 @@ export default class TowerManager {
 
     private upgradeTower(tower: Tower, upgradeType: "speed" | "range" | "damage"): void {
         const cost = tower.getUpgradeCost(upgradeType);
-        const gameState = ServiceLocator.getInstance().get<GameState>('gameState');
-        const uiManager = ServiceLocator.getInstance().get<UIManager>('uiManager');
         
-        if (gameState && gameState.canAfford(cost)) {
-            gameState.spendResources(cost);
+        if (this.gameState && this.gameState.canAfford(cost)) {
+            this.gameState.spendResources(cost);
             tower.upgrade(upgradeType);
-            
-            if (uiManager) {
-                uiManager.updateResources();
-                uiManager.updateTowerStats(tower);
-            }
             
             this.showUpgradePanel(tower);
         }
     }
 
     private purchaseSpecialPower(tower: Tower, powerType: "fire" | "ice" | "critical"): void {
-        const gameState = ServiceLocator.getInstance().get<GameState>('gameState');
-        const uiManager = ServiceLocator.getInstance().get<UIManager>('uiManager');
-        
-        if (gameState && gameState.canAfford(tower.getSpecialPowerCost())) {
-            gameState.spendResources(tower.getSpecialPowerCost());
+        if (this.gameState && this.gameState.canAfford(tower.getSpecialPowerCost())) {
+            this.gameState.spendResources(tower.getSpecialPowerCost());
             tower.setSpecialPower(powerType);
             
-            if (uiManager) {
-                uiManager.updateResources();
-                uiManager.updateTowerStats(tower);
-            }
+            // Emit event for UI updates
+            this.eventBus.emit('tower-upgraded', tower);
             
             this.showUpgradePanel(tower);
-        }
-    }
-
-    public update(): void {
-        // Update range circle if needed
-        if (this.selectedTower && this.rangeCircle) {
-            this.rangeCircle.clear();
-            this.rangeCircle.lineStyle(2, 0xffffff, 0.5);
-            this.rangeCircle.strokeCircle(
-                this.selectedTower.x,
-                this.selectedTower.y,
-                this.selectedTower.getCurrentRange()
-            );
         }
     }
 }

@@ -3,7 +3,7 @@ import { DroppedItem, GameItem, ItemRarity, ItemType, ResourceItem, HealthItem, 
 import TileMapManager from './tile-map-manager';
 import GameScene from '../scenes/game-scene';
 import { GAME_SETTINGS } from '../settings';
-import ServiceLocator from '../utils/service-locator';
+import { EventBus } from '../core/event-bus';
 
 export default class ItemDropManager {
     private scene: GameScene;
@@ -12,10 +12,12 @@ export default class ItemDropManager {
     private tileMapManager: TileMapManager;
     private pickupRange: number;
     private nextDropId: number = 0;
+    private eventBus: EventBus;
 
-    constructor(scene: GameScene, tileMapManager: TileMapManager) {
+    constructor(scene: GameScene, tileMapManager: TileMapManager, eventBus: EventBus) {
         this.scene = scene;
         this.tileMapManager = tileMapManager;
+        this.eventBus = eventBus;
         this.itemGroup = this.scene.add.group();
 
         // Get pickup range from GAME_SETTINGS, fallback to a default value if not found
@@ -23,9 +25,6 @@ export default class ItemDropManager {
 
         // Add collision detection for item pickup
         this.setupCollision();
-        
-        // Register with service locator
-        ServiceLocator.getInstance().register('itemDropManager', this);
     }
 
     /**
@@ -88,7 +87,7 @@ export default class ItemDropManager {
             sprite.setVisible(true);
             sprite.setActive(true);
             sprite.setDepth(50); // Set a high depth to ensure visibility
-            
+
             // Add a simple pulsing effect for visibility
             this.scene.tweens.add({
                 targets: sprite,
@@ -103,7 +102,7 @@ export default class ItemDropManager {
             sprite.setData('dropId', droppedItem.id);
             sprite.setData('itemName', item.name);
             sprite.setData('droppedTime', this.scene.time.now);
-            
+
             // Set collision properties for better physics
             sprite.body.setCircle(sprite.width / 4);
             sprite.body.setCollideWorldBounds(true);
@@ -246,7 +245,12 @@ export default class ItemDropManager {
             range,
             cooldown,
             projectileType,
-            tier
+            tier,
+            properties: {
+                damage,
+                range,
+                fireRate: cooldown
+            }
         };
     }
 
@@ -326,14 +330,14 @@ export default class ItemDropManager {
      */
     public removeItem(droppedItem: DroppedItem): void {
         console.log(`Attempting to fully remove item: ${droppedItem.item.name}`);
-        
+
         try {
             // Step 1: Remove from our tracking list first
             const index = this.droppedItems.indexOf(droppedItem);
             if (index !== -1) {
                 this.droppedItems.splice(index, 1);
             }
-            
+
             // Step 2: Handle sprite cleanup with multiple safety measures
             if (droppedItem.sprite) {
                 // Kill all tweens that might be animating this sprite
@@ -341,45 +345,45 @@ export default class ItemDropManager {
                     tween.stop();
                     tween.remove();
                 });
-                
+
                 // Find and destroy any debug text
                 const debugText = droppedItem.sprite.getData('debugText');
                 if (debugText && debugText.destroy) {
                     debugText.destroy();
                 }
-                
+
                 // Find and destroy any particles
                 const particles = droppedItem.sprite.getData('particles');
                 if (particles && particles.destroy) {
                     particles.destroy();
                 }
-                
+
                 // Find and destroy any light
                 const light = droppedItem.sprite.getData('light');
                 if (light) {
                     this.scene.lights.removeLight(light);
                 }
-                
+
                 // Completely disable the sprite (both visible and active flags)
                 droppedItem.sprite.setVisible(false);
                 droppedItem.sprite.setActive(false);
-                
+
                 // Remove from physics world
                 if (droppedItem.sprite.body) {
                     this.scene.physics.world.remove(droppedItem.sprite.body);
                 }
-                
+
                 // Remove from any groups it might be in
                 if (this.itemGroup) {
                     this.itemGroup.remove(droppedItem.sprite, true, true);
                 }
-                
+
                 // Final destruction with removeFromDisplayList and removeFromUpdateList flags
                 droppedItem.sprite.destroy(true);
-                
+
                 // Force garbage collection by removing the reference
                 droppedItem.sprite = undefined;
-                
+
                 // Add an additional cleanup check after a short delay to catch any persistent sprites
                 this.scene.time.delayedCall(50, () => {
                     // Look for any sprites at this position that might be remnants
@@ -391,7 +395,7 @@ export default class ItemDropManager {
                         }
                         return false;
                     });
-                    
+
                     // Destroy any found sprites at this position
                     if (items.length > 0) {
                         console.log(`Found ${items.length} lingering sprites at item position, cleaning up`);
@@ -399,18 +403,18 @@ export default class ItemDropManager {
                     }
                 });
             }
-            
+
             console.log(`Successfully removed item: ${droppedItem.item.name}`);
         } catch (error) {
             console.error(`Error during item removal for ${droppedItem.item.name}:`, error);
-            
+
             // Last-ditch effort - try to find and nuke any sprite at this location
             try {
                 const x = droppedItem.x;
                 const y = droppedItem.y;
-                
+
                 this.scene.children.getAll().forEach(obj => {
-                    if (obj instanceof Phaser.GameObjects.Sprite || 
+                    if (obj instanceof Phaser.GameObjects.Sprite ||
                         obj instanceof Phaser.GameObjects.Text) {
                         const dist = Phaser.Math.Distance.Between(obj.x, obj.y, x, y);
                         if (dist < 20) { // Close enough to be related to this item

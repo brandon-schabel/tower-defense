@@ -2,6 +2,7 @@ import { GAME_SETTINGS } from "../settings"; // Import
 
 export default class GameState {
   private resources: number = GAME_SETTINGS.resources.initialAmount; // Use from settings
+  public isInventoryOpen: boolean = false;
 
   getResources() {
     return this.resources;
@@ -25,8 +26,15 @@ export default class GameState {
     return this.resources >= amount;
   }
 
+  setInventoryOpen(isOpen: boolean): void {
+    this.isInventoryOpen = isOpen;
+  }
+
   saveToLocalStorage() {
-    localStorage.setItem("game-state", JSON.stringify({ resources: this.resources }));
+    localStorage.setItem("game-state", JSON.stringify({ 
+      resources: this.resources,
+      isInventoryOpen: this.isInventoryOpen
+    }));
   }
 
   loadFromLocalStorage() {
@@ -34,8 +42,10 @@ export default class GameState {
     if (data) {
       const parsed = JSON.parse(data);
       this.resources = parsed.resources || GAME_SETTINGS.resources.initialAmount; //from settings
+      this.isInventoryOpen = parsed.isInventoryOpen || false;
     } else {
       this.resources = GAME_SETTINGS.resources.initialAmount; //from settings
+      this.isInventoryOpen = false;
     }
   }
 }

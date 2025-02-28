@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { HealthBar } from "./health-bar";
+import { HealthBar } from "../../utils/health-bar";
 
 /**
  * A reusable component for managing entity health

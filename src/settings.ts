@@ -1,4 +1,12 @@
-import { EnemyType } from "./types/enemy-type";
+import { EnemyType } from "./entities/enemy/enemy-type";
+
+export enum TowerType {
+    Normal = 'normal',
+    Sniper = 'sniper',
+    Area = 'area',
+    Laser = 'laser',
+    Missile = 'missile'
+}
 
 export enum DifficultyLevel {
     Easy = 'easy',
@@ -95,150 +103,118 @@ const MAP_SETTINGS: MapSettings = {
     decorationCount: 100
 };
 
-type PlayerSettings = {
+// Define interfaces for type safety
+interface PlayerSettings {
     initialHealth: number;
     movementSpeed: number;
     shootCooldown: number;
-    shootRange: number;
-    projectileDamage: number;
+    damage: number;
+    attackRange: number;
+    inventorySize: number;
+    scale: number;
     pickupRange: number;
+    projectileDamage: number;
+    shootRange: number;
 }
 
-const PLAYER_SETTINGS: PlayerSettings = {
-    initialHealth: 100,
-    movementSpeed: 150,
-    shootCooldown: 500,
-    shootRange: 200,
-    projectileDamage: 20,
-    pickupRange: 50
-};
+interface EnemySettings {
+    spawnRate: number;
+    initialHealth: number;
+    damage: number;
+    movementSpeed: number;
+    attackRange: number;
+}
 
-export type TowerSettings = {
+export interface TowerSettings {
+    baseHealth: number;
+    attackRange: number;
+    attackSpeed: number;
+    damage: number;
+    cost: number;
+    health: number;
+    shootCooldown: number;
+    range: number;
+    scale: number;
+    price: number;
+    size: { width: number; height: number };
+    projectileType: string;
     name: string;
     texture: string;
-    projectileType: ProjectileType;
-    damage: number;
-    range: number;
-    shootCooldown: number;
+    fireRate: number;
+}
+
+export interface TowerConfig {
+    name: string;
+    texture: string;
     price: number;
-    health: number;
+    range: number;
+    damage: number;
+    fireRate: number;
     scale: number;
     size: { width: number; height: number };
+    projectileType?: string;
+    health: number;
+    shootCooldown: number;
 }
 
-const TOWER_SETTINGS = {
-    'normal-tower': {
-        name: 'Normal Tower',
-        texture: 'normal-tower',
-        projectileType: 'normal',
-        damage: 20,
-        range: 200,
-        shootCooldown: 1000,
-        price: 100,
-        health: 100,
-        scale: 1,
-        size: { width: 1, height: 1 }
-    },
-    'sniper-tower': {
-        name: 'Sniper Tower',
-        texture: 'sniper-tower',
-        projectileType: 'normal',
-        damage: 30,
-        range: 300,
-        shootCooldown: 1500,
-        price: 150,
-        health: 80,
-        scale: 1,
-        size: { width: 1, height: 1 }
-    },
-    'area-tower': {
-        name: 'Area Tower',
-        texture: 'area-tower',
-        projectileType: 'normal',
-        damage: 10,
-        range: 150,
-        shootCooldown: 500,
-        price: 120,
-        health: 120,
-        scale: 1,
-        size: { width: 2, height: 2 }
-    }
-} satisfies { [key: string]: TowerSettings };
-
-export type TowerType = keyof typeof TOWER_SETTINGS;
-
-
-type DifficultySettings = {
-    enemyHealthMultiplier: number;
-    enemyDamageMultiplier: number;
-    resourceMultiplier: number;
-}
-
-const DIFFICULTY_MULTIPLIER_SETTINGS = {
-    easy: {
-        enemyHealthMultiplier: 0.8,
-        enemyDamageMultiplier: 0.8,
-        resourceMultiplier: 1.2
-    },
-    medium: {
-        enemyHealthMultiplier: 1,
-        enemyDamageMultiplier: 1,
-        resourceMultiplier: 1
-    },
-    hard: {
-        enemyHealthMultiplier: 1.2,
-        enemyDamageMultiplier: 1.2,
-        resourceMultiplier: 0.8
-    }
-} satisfies { [key: string]: DifficultySettings };
-
-type BaseSettings = {
+interface BaseSettings {
     initialHealth: number;
-    size: { width: number; height: number };
-    color: number;
-    position: { x: number; y: number };
 }
 
-const BASE_SETTINGS: BaseSettings = {
-    initialHealth: 100,
-    size: { width: 100, height: 100 },
-    color: 0x0000ff,
-    position: { x: 400, y: 300 },
-};
-
-type ResourceSettings = {
+interface ResourceSettings {
     initialAmount: number;
-    perEnemyKillBase: number;
-    perRoundCompletionBase: number;
+    enemyDropAmount: {
+        min: number;
+        max: number;
+    };
 }
 
-const RESOURCE_SETTINGS: ResourceSettings = {
-    initialAmount: 100,
-    perEnemyKillBase: 5,
-    perRoundCompletionBase: 100,
-};
+interface WaveSettings {
+    initialDelay: number;
+    delay: number;
+    increaseFactor: number;
+}
 
-type GameSettings = {
-    itemDropChance: number;
-    game: {
-        enemyTargetRecalculationInterval: number;
+interface DropSettings {
+    chance: number;
+    crate: {
+        spawnChance: number;
+        minItems: number;
+        maxItems: number;
     };
-    map: MapSettings;
+}
+
+interface DebugSettings {
+    enabled: boolean;
+    showPhysics: boolean;
+    showPaths: boolean;
+    showRanges: boolean;
+    showFPS: boolean;
+    showInput: boolean;
+}
+
+interface GameSettings {
+    width: number;
+    height: number;
+    backgroundColor: number;
+    physics: {
+        gravity: { x: number; y: number };
+        debug: boolean;
+    };
     player: PlayerSettings;
-    towers: { [key: string]: TowerSettings };
-    enemies: { [key in EnemyType]: EnemyConfig };
-    difficulties: { [key: string]: DifficultySettings };
+    enemy: EnemySettings;
+    tower: TowerSettings;
     base: BaseSettings;
     resources: ResourceSettings;
-    powerUps: { [key: string]: PowerUpSettings };
-    projectiles: { [key: string]: ProjectileSettings };
-    debug: {
-        enabled: boolean;       // Master switch for all debugging
-        showFPS: boolean;       // Display frames per second
-        showPhysics: boolean;   // Show physics bodies
-        showInput: boolean;     // Show input states (mouse, keyboard)
-        showPaths: boolean;     // Show enemy paths
-        showRanges: boolean;    // Show tower ranges
+    map: MapSettings;
+    waves: WaveSettings;
+    drops: DropSettings;
+    towers: { [key in TowerType]: TowerConfig };
+    itemDropChance: number;
+    debug: DebugSettings;
+    enemies: { [key in EnemyType]: EnemyConfig };
+    game: {
+        enemyTargetRecalculationInterval: number;
     };
 }
 
@@ -344,25 +320,160 @@ const ENEMY_SETTINGS = {
 
 
 export const GAME_SETTINGS: GameSettings = {
-    itemDropChance: 0.3,
-    game: {
-        enemyTargetRecalculationInterval: 1000,
+    width: 1280,
+    height: 720,
+    backgroundColor: 0x000000,
+    physics: {
+        gravity: { x: 0, y: 0 },
+        debug: false
     },
+
+    player: {
+        initialHealth: 100,
+        movementSpeed: 160,
+        shootCooldown: 500,
+        damage: 10,
+        attackRange: 300,
+        inventorySize: 20,
+        scale: 1.0,
+        pickupRange: 50,
+        projectileDamage: 10,
+        shootRange: 300
+    },
+
+    enemy: {
+        spawnRate: 2000,
+        initialHealth: 50,
+        damage: 5,
+        movementSpeed: 100,
+        attackRange: 50
+    },
+
+    tower: {
+        baseHealth: 500,
+        attackRange: 200,
+        attackSpeed: 1000,
+        damage: 20,
+        cost: 150,
+        health: 500,
+        shootCooldown: 500,
+        range: 200,
+        scale: 1.0,
+        price: 150,
+        size: { width: 32, height: 32 },
+        projectileType: 'normal',
+        name: 'Normal Tower',
+        texture: 'tower-normal',
+        fireRate: 1000
+    },
+
+    base: {
+        initialHealth: 1000
+    },
+
+    resources: {
+        initialAmount: 300,
+        enemyDropAmount: {
+            min: 10,
+            max: 30
+        }
+    },
+
     map: MAP_SETTINGS,
-    player: PLAYER_SETTINGS,
-    towers: TOWER_SETTINGS,
-    enemies: ENEMY_SETTINGS,
-    difficulties: DIFFICULTY_MULTIPLIER_SETTINGS,
-    base: BASE_SETTINGS,
-    resources: RESOURCE_SETTINGS,
-    powerUps: POWER_UP_SETTINGS,
-    projectiles: PROJECTILE_SETTINGS,
+
+    waves: {
+        initialDelay: 10000,
+        delay: 30000,
+        increaseFactor: 1.2
+    },
+
+    drops: {
+        chance: 0.3,
+        crate: {
+            spawnChance: 0.1,
+            minItems: 1,
+            maxItems: 3
+        }
+    },
+
+    towers: {
+        [TowerType.Normal]: {
+            name: 'Normal Tower',
+            texture: 'tower-normal',
+            price: 100,
+            range: 200,
+            damage: 20,
+            fireRate: 1000,
+            scale: 1.0,
+            size: { width: 32, height: 32 },
+            projectileType: 'normal',
+            health: 500,
+            shootCooldown: 1000
+        },
+        [TowerType.Sniper]: {
+            name: 'Sniper Tower',
+            texture: 'tower-sniper',
+            price: 150,
+            range: 300,
+            damage: 30,
+            fireRate: 800,
+            scale: 1.0,
+            size: { width: 32, height: 32 },
+            projectileType: 'normal',
+            health: 500,
+            shootCooldown: 800
+        },
+        [TowerType.Area]: {
+            name: 'Area Tower',
+            texture: 'tower-area',
+            price: 200,
+            range: 150,
+            damage: 15,
+            fireRate: 1200,
+            scale: 1.0,
+            size: { width: 32, height: 32 },
+            projectileType: 'normal',
+            health: 500,
+            shootCooldown: 1200
+        },
+        [TowerType.Laser]: {
+            name: 'Laser Tower',
+            texture: 'tower-laser',
+            price: 250,
+            range: 250,
+            damage: 40,
+            fireRate: 1500,
+            scale: 1.0,
+            size: { width: 32, height: 32 },
+            projectileType: 'normal',
+            health: 500,
+            shootCooldown: 1500
+        },
+        [TowerType.Missile]: {
+            name: 'Missile Tower',
+            texture: 'tower-missile',
+            price: 300,
+            range: 200,
+            damage: 30,
+            fireRate: 1000,
+            scale: 1.0,
+            size: { width: 32, height: 32 },
+            projectileType: 'normal',
+            health: 500,
+            shootCooldown: 1000
+        }
+    },
+    itemDropChance: 0.5,
     debug: {
-        enabled: false,    // Debugging off by default
-        showFPS: false,    // FPS display off
-        showPhysics: false, // Physics debug off
-        showInput: false,  // Input debug off
-        showPaths: false,  // Path debug off
-        showRanges: false  // Range debug off
+        enabled: false,
+        showPhysics: false,
+        showPaths: false,
+        showRanges: false,
+        showFPS: false,
+        showInput: false
+    },
+    enemies: ENEMY_SETTINGS,
+    game: {
+        enemyTargetRecalculationInterval: 1000 // Recalculate every 1 second
     }
 };

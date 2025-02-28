@@ -1,77 +1,124 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import ServiceLocator from "../utils/service-locator";
+import { EventBus } from "../core/event-bus";
 
 export class InputManager {
     private scene: GameScene;
-    public keyMappings: Record<string, Phaser.Input.Keyboard.Key> = {}; // Initialize as empty object
-    private actionHandlers: Record<string, Function> = {};
-    private pendingKeyMappings: Record<string, string>;
+    private actionHandlers: Map<string, Function[]> = new Map();
+    public keyMappings: { [key: string]: Phaser.Input.Keyboard.Key } = {};
+    private pendingKeyMappings: { [key: string]: string } = {};
+    private eventBus: EventBus;
 
-    constructor(scene: GameScene, keyMappings: Record<string, string>) {
+    constructor(scene: GameScene, keyMappings: { [key: string]: string }, eventBus?: EventBus) {
         this.scene = scene;
-        this.pendingKeyMappings = keyMappings;
-
-        // Wait for scene to be ready before initializing key mappings
-        if (this.scene.input && this.scene.input.keyboard) {
+        this.pendingKeyMappings = keyMappings || {};
+        this.eventBus = eventBus || new EventBus();
+        
+        // Initialize key mappings once the scene is ready
+        if (this.scene.input?.keyboard) {
             this.initializeKeyMappings();
         } else {
-            // Add a safeguard to check if events exists
-            if (this.scene.events) {
-                this.scene.events.once('create', () => {
-                    this.initializeKeyMappings();
-                });
-            } else {
-                // If events is not available, use a different approach
-                // Set up a one-time check in the update loop
-                const checkForInitialization = () => {
-                    if (this.scene.input && this.scene.input.keyboard) {
-                        this.initializeKeyMappings();
-                        return true; // Signal that we're done
-                    }
-                    return false;
-                };
-
-                // Try immediately
-                if (!checkForInitialization()) {
-                    // If still not ready, set up a one-time check on the next frame
-                    const originalUpdate = this.update.bind(this);
-                    this.update = () => {
-                        if (checkForInitialization()) {
-                            // Restore original update once initialized
-                            this.update = originalUpdate;
-                        }
-                        originalUpdate();
-                    };
-                }
-            }
+            this.scene.events.once('create', () => {
+                this.initializeKeyMappings();
+            });
         }
-        
-        // Register with service locator
-        ServiceLocator.getInstance().register('inputManager', this);
     }
 
     private initializeKeyMappings(): void {
-        if (!this.scene.input || !this.scene.input.keyboard) {
-            console.warn("InputManager: Cannot initialize key mappings - keyboard not available");
-            return;
-        }
-
-        this.keyMappings = Object.entries(this.pendingKeyMappings).reduce((acc, [action, key]) => {
-            acc[action] = this.scene.input.keyboard!.addKey(key);
-            return acc;
-        }, {} as Record<string, Phaser.Input.Keyboard.Key>);
-    }
-
-    onAction(action: string, handler: Function): void {
-        this.actionHandlers[action] = handler;
-    }
-
-    update(): void {
-        Object.entries(this.keyMappings).forEach(([action, key]) => {
-            if (key && Phaser.Input.Keyboard.JustDown(key) && this.actionHandlers[action]) {
-                this.actionHandlers[action]();
+        for (const [action, key] of Object.entries(this.pendingKeyMappings)) {
+            if (this.scene.input && this.scene.input.keyboard) {
+                this.keyMappings[action] = this.scene.input.keyboard.addKey(key);
             }
-        });
+        }
+        
+        // Emit event when input manager is ready
+        this.eventBus.emit('input-manager-ready', this);
+    }
+
+    /**
+     * Register a handler for a specific action
+     */
+    public onAction(action: string, handler: Function): void {
+        if (!this.actionHandlers.has(action)) {
+            this.actionHandlers.set(action, []);
+        }
+        
+        const handlers = this.actionHandlers.get(action);
+        if (handlers) {
+            handlers.push(handler);
+        }
+    }
+
+    /**
+     * Remove a handler for a specific action
+     */
+    public removeAction(action: string, handler: Function): void {
+        if (!this.actionHandlers.has(action)) return;
+        
+        const handlers = this.actionHandlers.get(action);
+        if (handlers) {
+            const index = handlers.indexOf(handler);
+            if (index !== -1) {
+                handlers.splice(index, 1);
+            }
+        }
+    }
+
+    /**
+     * Check for key presses and trigger the corresponding action handlers
+     */
+    public update(): void {
+        for (const [action, key] of Object.entries(this.keyMappings)) {
+            if (Phaser.Input.Keyboard.JustDown(key)) {
+                const handlers = this.actionHandlers.get(action);
+                if (handlers) {
+                    handlers.forEach(handler => handler());
+                }
+                
+                // Emit event for key pressed
+                this.eventBus.emit(`key-${action}`, { action });
+            }
+        }
+    }
+
+    /**
+     * Get a key mapping for a specific action
+     */
+    public getKeyMapping(action: string): Phaser.Input.Keyboard.Key | undefined {
+        return this.keyMappings[action];
+    }
+
+    /**
+     * Set a key mapping for a specific action
+     */
+    public setKeyMapping(action: string, key: string): void {
+        // Remove old key if it exists
+        if (this.keyMappings[action]) {
+            this.keyMappings[action].reset();
+        }
+        
+        // Create new key mapping
+        if (this.scene.input && this.scene.input.keyboard) {
+            this.keyMappings[action] = this.scene.input.keyboard.addKey(key);
+            
+            // Update the pending key mappings for potential reset
+            this.pendingKeyMappings[action] = key;
+            
+            // Emit event for key mapping change
+            this.eventBus.emit('key-mapping-changed', { action, key });
+        }
+    }
+
+    /**
+     * Reset all key mappings to their default values
+     */
+    public resetKeyMappings(): void {
+        // Clear existing key mappings
+        for (const key of Object.values(this.keyMappings)) {
+            key.reset();
+        }
+        
+        // Reinitialize with pending key mappings
+        this.initializeKeyMappings();
     }
 }

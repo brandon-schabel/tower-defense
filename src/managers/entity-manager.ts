@@ -1,16 +1,17 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import Player from "../entities/player";
-import Base from "../entities/base";
-import Tower from "../entities/tower";
-import Enemy from "../entities/enemy";
+import Player from "../entities/player/player";
+import Base from "../entities/base/base";
+import Tower from "../entities/tower/tower";
+import Enemy from "../entities/enemy/enemy";
 import { GAME_SETTINGS } from "../settings";
-import { EnemyType } from "../types/enemy-type";
+import { EnemyType } from "../entities/enemy/enemy-type";
 import EntityFactory from "../factories/entity-factory";
-import ServiceLocator from "../utils/service-locator";
 import TileMapManager from "./tile-map-manager";
-import { EventBus } from "../utils/event-bus";
-import RoundManager from "./round-manager";
+import { EventBus } from "../core/event-bus";
+import GameState from "../utils/game-state";
+import ItemDropManager from "./item-drop-manager";
+import CombatSystem from "../systems/combat-system";
 
 export default class EntityManager {
     private scene: GameScene;
@@ -21,30 +22,78 @@ export default class EntityManager {
     private projectiles?: Phaser.Physics.Arcade.Group;
     private entityFactory!: EntityFactory;
     private gameOverHandled = false;
+    private tileMapManager: TileMapManager;
+    private eventBus: EventBus;
+    private gameState: GameState;
+    private itemDropManager: ItemDropManager | null = null;
+    private combatSystem: CombatSystem | null = null;
 
-    constructor(scene: GameScene) {
+    constructor(
+        scene: GameScene,
+        tileMapManager: TileMapManager,
+        eventBus: EventBus,
+        gameState: GameState
+    ) {
         this.scene = scene;
+        this.tileMapManager = tileMapManager;
+        this.eventBus = eventBus;
+        this.gameState = gameState;
         this.initialize();
-        
-        // Register with service locator
-        ServiceLocator.getInstance().register('entityManager', this);
     }
 
     private initialize(): void {
         // Initialize entity factory and groups
-        this.entityFactory = new EntityFactory(this.scene);
+        this.entityFactory = new EntityFactory(this.scene, this.tileMapManager, this.eventBus);
         this.enemies = this.scene.physics.add.group();
         this.towers = this.scene.physics.add.group();
         this.projectiles = this.scene.physics.add.group();
 
+        // Set entity manager in factory (to avoid circular dependency)
+        this.entityFactory.setEntityManager(this);
+
         // Create base
-        const tileMapManager = ServiceLocator.getInstance().get<TileMapManager>('tileMapManager');
-        if (!tileMapManager) {
-            console.error("TileMapManager not found in service locator");
+        const basePos = this.tileMapManager.tileToWorld(
+            Math.floor(GAME_SETTINGS.map.width / 2),
+            Math.floor(GAME_SETTINGS.map.height / 2)
+        );
+        
+        // Note: We'll fully initialize the factory after we've set all dependencies
+    }
+    
+    /**
+     * Sets the item drop manager reference
+     */
+    public setItemDropManager(itemDropManager: ItemDropManager): void {
+        this.itemDropManager = itemDropManager;
+        if (this.entityFactory) {
+            this.entityFactory.setItemDropManager(itemDropManager);
+        }
+    }
+    
+    /**
+     * Sets the combat system reference
+     */
+    public setCombatSystem(combatSystem: CombatSystem): void {
+        this.combatSystem = combatSystem;
+        if (this.entityFactory) {
+            this.entityFactory.setCombatSystem(combatSystem);
+        }
+    }
+    
+    /**
+     * Completes initialization after all dependencies are set
+     */
+    public completeInitialization(): void {
+        if (!this.itemDropManager || !this.combatSystem) {
+            console.error("Cannot complete initialization - missing dependencies");
             return;
         }
         
-        const basePos = tileMapManager.tileToWorld(
+        // Set game state in factory
+        this.entityFactory.setGameState(this.gameState);
+        
+        // Create base
+        const basePos = this.tileMapManager.tileToWorld(
             Math.floor(GAME_SETTINGS.map.width / 2),
             Math.floor(GAME_SETTINGS.map.height / 2)
         );
@@ -108,38 +157,44 @@ export default class EntityManager {
     }
 
     public recalculateEnemyTargets(): void {
-        if (!this.enemies || !this.towers) return;
+        if (!this.enemies) return;
 
-        const towersActive = this.towers.countActive(true);
-
-        this.enemies.getChildren().forEach((obj) => {
+        this.enemies.getChildren().forEach(obj => {
             const enemy = obj as Enemy;
             if (!enemy.active) return;
 
-            let newTarget: Phaser.Physics.Arcade.Sprite | null = null;
+            // Get current target
+            const currentTarget = enemy.getData('target') as Phaser.Physics.Arcade.Sprite;
+            
+            // Skip if target is still valid
+            if (currentTarget && currentTarget.active) return;
 
-            // Check if player is very close (top priority for close range)
-            const distToUser = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.user.x, this.user.y);
-            if (distToUser < 100) {
-                newTarget = this.user;
-            }
-            // Priority 1: Target towers if any exist
-            else if (towersActive > 0) {
-                const nearestTower = this.findNearestTower(enemy.x, enemy.y, Infinity);
-                if (nearestTower) {
-                    const distToTower = Phaser.Math.Distance.Between(enemy.x, enemy.y, nearestTower.x, nearestTower.y);
-                    if (distToTower < 500) { // Only target towers within reasonable range
-                        newTarget = nearestTower;
-                    }
-                }
-            }
+            // Find new target
+            const playerDistance = Phaser.Math.Distance.Between(
+                enemy.x, enemy.y, this.user.x, this.user.y
+            );
 
-            // Priority 2: Target base if no towers in range
-            if (!newTarget && this.base.active) {
-                newTarget = this.base;
+            // Check if player is in range (using a constant value as fallback)
+            const playerDetectionRange = 300; // Fallback value
+            if (playerDistance < playerDetectionRange) {
+                enemy.setData('target', this.user);
+                return;
             }
 
-            enemy.setData("target", newTarget);
+            // Find nearest tower
+            const towerDetectionRange = 500; // Fallback value
+            const nearestTower = this.findNearestTower(
+                enemy.x, enemy.y, 
+                towerDetectionRange
+            );
+
+            if (nearestTower) {
+                enemy.setData('target', nearestTower);
+                return;
+            }
+
+            // Default to base if no other targets
+            enemy.setData('target', this.base);
         });
     }
 
@@ -192,35 +247,58 @@ export default class EntityManager {
     }
 
     public spawnEnemy(enemyType: EnemyType): void {
-        if (this.gameOverHandled) return;
+        if (!this.itemDropManager || !this.combatSystem) {
+            console.error("Cannot spawn enemy - missing dependencies");
+            return;
+        }
         
-        const roundManager = ServiceLocator.getInstance().get<RoundManager>('roundManager');
-        if (!roundManager || roundManager.getRoundState() !== 'combat') return;
-
-        const tier = Math.min(roundManager.getCurrentRound() + 1, 5);
-        const startPos = this.findValidStartPosition();
-
-        if (!startPos) {
-            console.warn("[EntityManager] No valid start position found for enemy.");
+        // Find spawn point
+        const spawnPoint = this.tileMapManager.getEnemySpawnPoint();
+        if (!spawnPoint) {
+            console.error("No valid enemy spawn point found");
             return;
         }
 
-        const eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus');
-        
+        // Create enemy
         const onEnemyDeath = () => {
-            if (this.gameOverHandled) return;
-            if (eventBus) {
-                eventBus.emit('enemy-killed', startPos.x, startPos.y);
+            // Award resources based on enemy type
+            let reward = 10; // Default reward
+            
+            // Use a type-safe approach to access enemy rewards
+            try {
+                // Access the enemy config as a generic object to avoid type errors
+                const enemyConfig = GAME_SETTINGS.enemies[enemyType] as any;
+                if (enemyConfig && typeof enemyConfig === 'object') {
+                    // Try to get the reward from various possible property names
+                    reward = enemyConfig.reward || 
+                             enemyConfig.resourceReward || 
+                             enemyConfig.resources || 
+                             reward;
+                }
+            } catch (error) {
+                console.warn(`Error getting reward for enemy type ${enemyType}:`, error);
             }
-            if (roundManager) {
-                roundManager.enemyDefeated();
-            }
+            
+            this.gameState.earnResources(reward);
+            
+            // Emit event
+            this.eventBus.emit('enemy-killed', spawnPoint.x, spawnPoint.y);
+            
+            // Update UI
+            this.eventBus.emit('update-resources');
         };
 
-        const enemy = this.entityFactory.createEnemy(startPos.x, startPos.y, enemyType, tier, onEnemyDeath);
+        const enemy = this.entityFactory.createEnemy(
+            spawnPoint.x, spawnPoint.y,
+            enemyType,
+            1, // tier
+            onEnemyDeath
+        );
+
         if (enemy && this.enemies) {
             this.enemies.add(enemy);
-            enemy.setData('target', this.base);
+            // Setting target via setter method rather than data
+            enemy.setTarget(this.base);
         }
     }
 
@@ -257,21 +335,28 @@ export default class EntityManager {
         if (this.gameOverHandled) return;
         this.gameOverHandled = true;
 
-        this.scene.physics.pause();
-        this.enemies?.clear(true, true);
-        this.towers?.clear(true, true);
-        this.projectiles?.clear(true, true);
+        // Show game over message
+        this.scene.showMessage('Game Over!', 0xff0000, '48px');
 
-        const gameOverText = this.scene.add.text(
-            Number(this.scene.game.config.width) / 2,
-            Number(this.scene.game.config.height) / 2,
-            "Game Over!",
-            { fontSize: "64px", color: "#ff0000" }
-        ).setOrigin(0.5);
+        // Disable player controls
+        if (this.user) {
+            this.user.setActive(false);
+        }
 
+        // Stop all enemies
+        if (this.enemies) {
+            this.enemies.getChildren().forEach(enemy => {
+                (enemy as Phaser.Physics.Arcade.Sprite).setVelocity(0, 0);
+                (enemy as Phaser.Physics.Arcade.Sprite).setActive(false);
+            });
+        }
+
+        // Emit game over event
+        this.eventBus.emit('game-over');
+
+        // Return to main menu after delay
         this.scene.time.delayedCall(3000, () => {
-            this.scene.scene.restart({ isNewGame: true });
-            this.scene.game.events.emit('end-game');
+            this.scene.scene.start('MainMenuScene');
         });
     }
 
@@ -290,81 +375,76 @@ export default class EntityManager {
     }
 
     private findValidStartPosition(): { x: number, y: number } {
-        // Get map dimensions from tile manager
-        const tileMapManager = ServiceLocator.getInstance().get<TileMapManager>('tileMapManager');
-        if (!tileMapManager) {
-            console.error("TileMapManager not found in service locator");
-            return { x: 0, y: 0 }; // Default fallback
-        }
+        const baseX = this.base.x;
+        const baseY = this.base.y;
+        const minDistance = 200; // Minimum distance from base
+        const maxDistance = 300; // Maximum distance from base
         
-        const mapWidth = tileMapManager.getMapWidth() || 100; // Default to 100 if undefined
-        const mapHeight = tileMapManager.getMapHeight() || 100; // Default to 100 if undefined
-
-        // Randomly choose an edge (0 = top, 1 = right, 2 = bottom, 3 = left)
-        const edge = Phaser.Math.Between(0, 3);
-
-        let tileX: number;
-        let tileY: number;
-        const margin = 2; // Keep a small margin from the absolute edge
-
-        switch (edge) {
-            case 0: // Top edge
-                tileX = Phaser.Math.Between(margin, mapWidth - margin);
-                tileY = margin;
-                break;
-            case 1: // Right edge
-                tileX = mapWidth - margin;
-                tileY = Phaser.Math.Between(margin, mapHeight - margin);
-                break;
-            case 2: // Bottom edge
-                tileX = Phaser.Math.Between(margin, mapWidth - margin);
-                tileY = mapHeight - margin;
-                break;
-            case 3: // Left edge
-                tileX = margin;
-                tileY = Phaser.Math.Between(margin, mapHeight - margin);
-                break;
-            default:
-                // Fallback to a safe position if something goes wrong
-                tileX = margin;
-                tileY = margin;
-        }
-
-        // Make sure position is not occupied
-        if (!tileMapManager.isTileAvailable(tileX, tileY, 1, 1)) {
-            // If position isn't available, try again with recursive call
-            // (with a limit to prevent infinite recursion)
-            return this.findValidStartPosition();
-        }
-
-        // Convert tile position to world position
-        return tileMapManager.tileToWorld(tileX, tileY);
+        let x, y, distance;
+        let attempts = 0;
+        const maxAttempts = 50;
+        
+        do {
+            // Get random position within map bounds
+            const tileX = Phaser.Math.Between(2, GAME_SETTINGS.map.width - 3);
+            const tileY = Phaser.Math.Between(2, GAME_SETTINGS.map.height - 3);
+            
+            // Convert to world coordinates
+            const worldPos = this.tileMapManager.tileToWorld(tileX, tileY);
+            x = worldPos.x;
+            y = worldPos.y;
+            
+            // Calculate distance from base
+            distance = Phaser.Math.Distance.Between(x, y, baseX, baseY);
+            attempts++;
+            
+            // Check if position is valid (not occupied and within distance range)
+            if (distance >= minDistance && distance <= maxDistance && 
+                this.tileMapManager.isTileAvailable(tileX, tileY, 1, 1)) {
+                return { x, y };
+            }
+        } while (attempts < maxAttempts);
+        
+        // Fallback position if no valid position found
+        return { 
+            x: baseX + minDistance, 
+            y: baseY 
+        };
     }
 
     private chooseEnemyType(): EnemyType {
-        // As rounds progress, introduce stronger enemies
-        const roundManager = ServiceLocator.getInstance().get<RoundManager>('roundManager');
-        const currentRound = roundManager ? roundManager.getCurrentRound() : 0;
+        // Get current round from the scene
+        const currentRound = this.scene.getCurrentRound();
         
-        const availableTypes: EnemyType[] = [EnemyType.Normal];
-
-        if (currentRound >= 3) {
-            availableTypes.push(EnemyType.Fast);
+        // Simple logic: higher rounds introduce more enemy types
+        if (currentRound > 15) {
+            return Phaser.Math.RND.pick([
+                EnemyType.Normal, 
+                EnemyType.Fast, 
+                EnemyType.Heavy, 
+                EnemyType.Boss,
+                EnemyType.Flying
+            ]);
+        } else if (currentRound > 10) {
+            return Phaser.Math.RND.pick([
+                EnemyType.Normal, 
+                EnemyType.Fast, 
+                EnemyType.Heavy, 
+                EnemyType.Boss
+            ]);
+        } else if (currentRound > 5) {
+            return Phaser.Math.RND.pick([
+                EnemyType.Normal, 
+                EnemyType.Fast, 
+                EnemyType.Heavy
+            ]);
+        } else if (currentRound > 2) {
+            return Phaser.Math.RND.pick([
+                EnemyType.Normal, 
+                EnemyType.Fast
+            ]);
+        } else {
+            return EnemyType.Normal;
         }
-
-        if (currentRound >= 5) {
-            availableTypes.push(EnemyType.Tank);
-        }
-
-        if (currentRound >= 7) {
-            availableTypes.push(EnemyType.Boss);
-        }
-
-        // Higher chance for special enemies in later rounds
-        if (currentRound > 10) {
-            availableTypes.push(EnemyType.Fast, EnemyType.Tank); // Add extra entries to increase probability
-        }
-
-        return Phaser.Math.RND.pick(availableTypes);
     }
 }

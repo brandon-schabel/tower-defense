@@ -1,28 +1,30 @@
 import Phaser from "phaser";
-import Player from "../entities/player";
-import Base from "../entities/base";
+import Player from "../entities/player/player";
+import Base from "../entities/base/base";
 import HUD from "../ui/hud";
 import GameState from "../utils/game-state";
-import Tower from "../entities/tower";
-import { GAME_SETTINGS, TowerType } from "../settings";
-import { DifficultyLevel } from "../settings";
+import Tower from "../entities/tower/tower";
+import { GAME_SETTINGS, TowerType, DifficultyLevel } from "../settings";
 import TileMapManager from "../managers/tile-map-manager";
 import ItemDropManager from "../managers/item-drop-manager";
 import { GameItem } from "../types/item";
 import InventoryUI from "../ui/inventory-ui";
 import CameraController from "../utils/camera-controller";
 import { BaseScene } from "./base-scene";
-import { EventBus } from "../utils/event-bus";
+import { EventBus } from "../core/event-bus";
 import { InputManager } from "../managers/input-manger";
-import { EnemyType } from "../types/enemy-type";
+import { EnemyType } from "../entities/enemy/enemy-type";
 import { gameConfig } from "../utils/app-config";
-import BuildController from "../managers/build-controller";
-import RoundManager from "../managers/round-manager";
+import BuildSystem from "../systems/build-system";
+import RoundManager from "../systems/round-manager";
 import EntityManager from "../managers/entity-manager";
 import TowerManager from "../managers/tower-manager";
 import CombatSystem from "../systems/combat-system";
-import ServiceLocator from "../utils/service-locator";
-import GameCoordinator from "../coordinators/game-coordinator";
+import GameCoordinator from "../core/game-coordinator";
+import UIManager from "../managers/ui-manager";
+
+// Remove constant for debug settings
+const DEFAULT_DROP_CHANCE = 0.3; // Default item drop chance
 
 type SceneInitData = {
     isNewGame: boolean;
@@ -46,7 +48,7 @@ export default class GameScene extends BaseScene {
     private physicsDebugGraphic!: Phaser.GameObjects.Graphics;
 
     // Managers
-    private buildController!: BuildController;
+    private buildController!: BuildSystem;
     private roundManager!: RoundManager;
     private entityManager!: EntityManager;
     private towerManager!: TowerManager;
@@ -54,7 +56,9 @@ export default class GameScene extends BaseScene {
     
     // New coordinator
     private gameCoordinator!: GameCoordinator;
+    private uiManager!: UIManager;
 
+    // New UI manager
     constructor() {
         super({ key: "GameScene" });
         this.inputManager = new InputManager(this, {
@@ -69,9 +73,6 @@ export default class GameScene extends BaseScene {
     }
 
     init(data: SceneInitData) {
-        // Clear service locator to avoid stale references
-        ServiceLocator.getInstance().clear();
-        
         // Initialize game state
         this.gameState = new GameState();
         
@@ -84,10 +85,6 @@ export default class GameScene extends BaseScene {
     }
 
     create() {
-        // Register this scene with service locator
-        ServiceLocator.getInstance().register('gameScene', this);
-        ServiceLocator.getInstance().register('gameState', this.gameState);
-        
         this.setupPhysics();
         this.setupCamera();
 
@@ -105,36 +102,82 @@ export default class GameScene extends BaseScene {
 
         // Initialize tile map
         this.tileMapManager = new TileMapManager(this);
-        ServiceLocator.getInstance().register('tileMapManager', this.tileMapManager);
 
         // Place decorative tiles
         this.placeDecorativeTiles();
 
-        // Initialize Entity Manager
-        this.entityManager = new EntityManager(this);
-        ServiceLocator.getInstance().register('entityManager', this.entityManager);
+        // Initialize managers and systems with dependency injection
+        this.entityManager = new EntityManager(
+            this, 
+            this.tileMapManager, 
+            this.eventBus, 
+            this.gameState
+        );
 
         // Set up camera to follow player
         this.cameras.main.startFollow(this.entityManager.getUser());
         this.cameraController = new CameraController(this, this.entityManager.getUser());
 
-        // Initialize other managers
-        this.itemDropManager = new ItemDropManager(this, this.tileMapManager);
-        this.inventoryUI = new InventoryUI(this, this.entityManager.getUser().getInventory());
+        // Initialize other managers with dependencies
+        this.itemDropManager = new ItemDropManager(this, this.tileMapManager, this.eventBus);
+        
+        // Get the player's inventory manager
+        const playerInventory = this.entityManager.getUser().getInventory() as any;
+        this.inventoryUI = new InventoryUI(this, playerInventory);
         this.inventoryUI.hide();
         this.hud = new HUD(this);
 
-        this.buildController = new BuildController(this);
-        this.roundManager = new RoundManager(this);
-        this.towerManager = new TowerManager(this);
-        this.combatSystem = new CombatSystem(this);
+        // Initialize systems with dependencies
+        this.combatSystem = new CombatSystem(
+            this,
+            this.entityManager,
+            this.eventBus
+        );
+
+        this.towerManager = new TowerManager(
+            this,
+            this.entityManager,
+            this.eventBus,
+            this.gameState
+        );
+
+        this.buildController = new BuildSystem(
+            this,
+            this.tileMapManager,
+            this.gameState,
+            this.eventBus,
+            this.entityManager,
+            this.combatSystem
+        );
+
+        this.roundManager = new RoundManager(
+            this,
+            this.entityManager,
+            this.eventBus,
+            this.gameState
+        );
         
-        // Register all managers with service locator
-        // Note: Most managers self-register in their constructors now
-        ServiceLocator.getInstance().register('eventBus', this.eventBus);
+        // Initialize UI manager with dependencies
+        this.uiManager = new UIManager(
+            this,
+            this.entityManager,
+            this.eventBus
+        );
         
-        // Initialize game coordinator after all managers
-        this.gameCoordinator = new GameCoordinator(this);
+        // Initialize game coordinator with all dependencies
+        this.gameCoordinator = new GameCoordinator(
+            this,
+            this.entityManager,
+            this.roundManager,
+            this.buildController,
+            this.towerManager,
+            this.combatSystem,
+            this.itemDropManager,
+            this.gameState,
+            this.eventBus,
+            this.tileMapManager,
+            this.uiManager
+        );
         
         // Register input handlers
         this.setupInputHandlers();
@@ -211,7 +254,7 @@ export default class GameScene extends BaseScene {
         return this.roundManager;
     }
 
-    public getBuildController(): BuildController {
+    public getBuildController(): BuildSystem {
         return this.buildController;
     }
 
@@ -301,11 +344,26 @@ export default class GameScene extends BaseScene {
 
     public toggleInventoryUI(): void {
         this.isInventoryVisible = !this.isInventoryVisible;
-
+        
+        this.gameState.setInventoryOpen(this.isInventoryVisible);
+        
         if (this.isInventoryVisible) {
             this.inventoryUI.show();
+            
+            const dimBackground = this.add.rectangle(
+                0, 0, 
+                this.cameras.main.width * 2, 
+                this.cameras.main.height * 2, 
+                0x000000, 0.5
+            ).setOrigin(0).setDepth(90);
+            
+            this.inventoryUI.setBackground(dimBackground);
+            
+            this.eventBus.emit('inventory-opened');
         } else {
             this.inventoryUI.hide();
+            
+            this.eventBus.emit('inventory-closed');
         }
     }
 
@@ -406,7 +464,8 @@ export default class GameScene extends BaseScene {
     }
 
     public getInventory(): any[] {
-        return this.getUser().getInventory().getInventory().filter((slot): slot is any => slot !== null);
+        const inventory = this.getUser().getInventory() as any;
+        return inventory.getInventory().filter((slot: any): slot is any => slot !== null);
     }
 
     public equipItem(item: GameItem): void {
@@ -473,19 +532,26 @@ export default class GameScene extends BaseScene {
     }
 
     public showPickupMessage(message: string): void {
-        const text = this.add.text(
-            this.cameras.main.worldView.centerX,
-            this.cameras.main.worldView.centerY - 50,
-            message,
-            { fontSize: '24px', color: '#ffffff' }
-        ).setOrigin(0.5);
-
+        const messageText = this.add.text(
+            this.cameras.main.width / 2, 
+            this.cameras.main.height - 100, 
+            message, 
+            { 
+                fontSize: '20px', 
+                color: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 3,
+                shadow: { color: '#000', fill: true, offsetX: 2, offsetY: 2, blur: 4 }
+            }
+        ).setOrigin(0.5).setDepth(100);
+        
         this.tweens.add({
-            targets: text,
+            targets: messageText,
+            y: this.cameras.main.height - 150,
             alpha: 0,
-            y: text.y - 50,
-            duration: 1000,
-            onComplete: () => text.destroy()
+            duration: 2000,
+            ease: 'Power2',
+            onComplete: () => messageText.destroy()
         });
     }
 

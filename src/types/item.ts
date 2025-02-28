@@ -22,18 +22,35 @@ export enum ItemType {
 }
 
 /**
- * Base interface for all game items
+ * Base item interface for all game items
  */
 export interface GameItem {
     id: string;
     name: string;
     description: string;
-    texture: string;
-    type: ItemType;
-    rarity: ItemRarity;
-    value: number;
+    type: string;
+    rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
     stackable: boolean;
-    useOnPickup?: boolean;
+    texture: string;
+    value?: number;
+    quantity?: number;
+    slot?: string;
+    properties?: {
+        damage?: number;
+        healthRestore?: number;
+        fireRate?: number;
+        range?: number;
+        speedBonus?: number;
+        damageBonus?: number;
+        rangeBonus?: number;
+        healthBonus?: number;
+        buffs?: {
+            [key: string]: {
+                value: number;
+                duration: number;
+            };
+        };
+    };
 }
 
 /**
@@ -42,26 +59,33 @@ export interface GameItem {
 export interface HealthItem extends GameItem {
     type: ItemType.HEALTH;
     healAmount: number;
+    resourceAmount?: number;
 }
 
 /**
  * Resource item for collecting resources
  */
 export interface ResourceItem extends GameItem {
-    type: ItemType.RESOURCE;
-    resourceAmount: number;
+    type: 'resource';
+    value: number;
+    resourceAmount?: number;
 }
 
 /**
- * Weapon item that player can equip
+ * Weapon item with specific weapon properties
  */
 export interface WeaponItem extends GameItem {
-    type: ItemType.WEAPON;
-    damage: number;
-    range: number;
-    cooldown: number;
-    projectileType: string;
-    tier: number;
+    type: 'weapon';
+    properties: {
+        damage: number;
+        fireRate: number;
+        range: number;
+    };
+    damage?: number;
+    range?: number;
+    cooldown?: number;
+    projectileType?: string;
+    tier?: number;
 }
 
 /**
@@ -113,20 +137,39 @@ export interface DroppedItem {
     sprite?: Phaser.Physics.Arcade.Sprite;
 }
 
+/**
+ * Equipment item for armor, accessories, etc.
+ */
 export interface EquipmentItem extends GameItem {
-    slot: string;
-    stats: {
+    type: 'equipment';
+    slot: 'head' | 'body' | 'accessory' | 'weapon' | 'armor' | 'helmet';
+    tier?: number;
+    properties: {
         healthBonus?: number;
-        damageBonus?: number;
         speedBonus?: number;
+        damageBonus?: number;
         rangeBonus?: number;
-        specialEffect?: {
-            type: string;
-            chance: number;
-            power: number;
+    };
+    stats?: {
+        healthBonus?: number;
+        speedBonus?: number;
+        damageBonus?: number;
+        rangeBonus?: number;
+    };
+}
+
+/**
+ * Consumable item (like potions, scrolls, etc.)
+ */
+export interface ConsumableItem extends GameItem {
+    type: 'consumable';
+    properties: {
+        healthRestore?: number;
+        buffs?: {
+            [key: string]: {
+                value: number;
+                duration: number;
+            };
         };
     };
-    description: string;
-    texture: string;
-    tier: number;
 } 

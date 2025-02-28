@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
-import InventoryManager from '../managers/inventory-manager';
+import { InventoryManager } from '../utils/inventory-manager';
 import { GameItem, InventorySlot, ItemRarity, ItemType, HealthItem } from '../types/item';
-import { EventBus } from "../utils/event-bus";
+import { EventBus } from "../core/event-bus";
 
 export default class InventoryUI {
     private scene: Phaser.Scene;
-    private inventoryManager: InventoryManager;
+    private inventoryManager: InventoryManager | null;
     private container: Phaser.GameObjects.Container;
     private slots: Phaser.GameObjects.Container[] = [];
     private draggedItem: {
@@ -18,6 +18,7 @@ export default class InventoryUI {
     private isVisible: boolean = false;
     private eventBus: EventBus;
     private onDragMove: ((p: Phaser.Input.Pointer) => void) | null = null;
+    private background: Phaser.GameObjects.Rectangle | null = null;
 
     // Constants for layout
     private readonly ROWS = 4;
@@ -26,7 +27,7 @@ export default class InventoryUI {
     private readonly SLOT_PADDING = 8;
     private readonly BG_PADDING = 20;
 
-    constructor(scene: Phaser.Scene, inventoryManager: InventoryManager) {
+    constructor(scene: Phaser.Scene, inventoryManager: InventoryManager | null = null) {
         this.scene = scene;
         this.inventoryManager = inventoryManager;
         this.container = scene.add.container(0, 0);
@@ -146,8 +147,8 @@ export default class InventoryUI {
             slotBg.setFillStyle(0x555555); // Highlight color
             
             // Show tooltip for the item
-            const inventoryData = this.inventoryManager.getInventory();
-            const slotData = inventoryData[slotIndex];
+            const inventoryData = this.inventoryManager?.getInventory();
+            const slotData = inventoryData?.[slotIndex];
             
             if (slotData) {
                 // Get pointer position
@@ -184,8 +185,8 @@ export default class InventoryUI {
             startPosition = {x: pointer.x, y: pointer.y};
             dragStarted = false;
             
-            const inventoryData = this.inventoryManager.getInventory();
-            const slotData = inventoryData[slotIndex];
+            const inventoryData = this.inventoryManager?.getInventory();
+            const slotData = inventoryData?.[slotIndex];
             
             // If slot has an item and we're not already dragging something
             if (slotData && !this.draggedItem) {
@@ -200,7 +201,7 @@ export default class InventoryUI {
                             dragStarted = true;
                             
                             // Create visual for dragging
-                            const sprite = this.scene.add.sprite(p.x, p.y, slotData.item.texture);
+                            const sprite = this.scene.add.sprite(p.x, p.y, this.getItemTexture(slotData.item));
                             sprite.setScale(0.8);
                             sprite.setDepth(101);
                             
@@ -249,8 +250,8 @@ export default class InventoryUI {
             
             // If we didn't start dragging, treat it as a click to use the item
             if (!dragStarted && !this.draggedItem) {
-                const inventoryData = this.inventoryManager.getInventory();
-                const slotData = inventoryData[slotIndex];
+                const inventoryData = this.inventoryManager?.getInventory();
+                const slotData = inventoryData?.[slotIndex];
                 
                 if (slotData) {
                     // Use the item if it's a health item
@@ -262,7 +263,7 @@ export default class InventoryUI {
             // If we're dragging something and released over a slot
             else if (this.draggedItem) {
                 // Handle item placement
-                this.inventoryManager.moveItem(
+                this.inventoryManager?.moveItem(
                     this.draggedItem.originalSlot,
                     slotIndex
                 );
@@ -322,8 +323,8 @@ export default class InventoryUI {
      * Handle using an item from inventory
      */
     private useItem(slotIndex: number): void {
-        const inventoryData = this.inventoryManager.getInventory();
-        const slotData = inventoryData[slotIndex];
+        const inventoryData = this.inventoryManager?.getInventory();
+        const slotData = inventoryData?.[slotIndex];
 
         if (!slotData) return;
 
@@ -333,7 +334,7 @@ export default class InventoryUI {
                 const healthItem = slotData.item as HealthItem;
                 if (healthItem.healAmount) {
                     // First, try to remove the item before applying effects
-                    const removed = this.inventoryManager.removeItemFromSlot(slotIndex, 1);
+                    const removed = this.inventoryManager?.removeItemFromSlot(slotIndex, 1);
                     
                     if (removed) {
                         // Only proceed with healing if item was successfully removed
@@ -521,47 +522,46 @@ export default class InventoryUI {
     }
 
     /**
-     * Refresh inventory display
+     * Update the inventory display based on current inventory data
      */
     public updateInventoryDisplay(): void {
-        const inventoryData = this.inventoryManager.getInventory();
+        // Get items from inventory manager
+        const inventoryItems = this.inventoryManager?.getItems() || [];
 
         // Clear all slots first
         this.slots.forEach(slot => {
-            // Remove all items except the slot background
-            while (slot.list.length > 1) {
-                const item = slot.list[slot.list.length - 1];
-                slot.remove(item, true);
-            }
+            // Remove all children except the background
+            const slotBg = slot.getAt(0);
+            slot.removeAll();
+            if (slotBg) slot.add(slotBg);
         });
 
         // Add items to slots
-        inventoryData.forEach((slotData, index) => {
-            if (slotData && index < this.slots.length) {
+        inventoryItems.forEach((item, index) => {
+            if (item && index < this.slots.length) {
                 const slot = this.slots[index];
-
-                // Add item sprite
-                const itemSprite = this.scene.add.sprite(0, 0, slotData.item.texture);
-                itemSprite.setDisplaySize(this.SLOT_SIZE * 0.8, this.SLOT_SIZE * 0.8);
-
-                // Add rarity border
-                const rarityColor = this.getRarityColor(slotData.item.rarity);
-                const rarityBorder = this.scene.add.rectangle(0, 0, this.SLOT_SIZE, this.SLOT_SIZE, rarityColor, 0);
-                rarityBorder.setStrokeStyle(2, rarityColor);
-
-                // Add quantity text if more than 1
-                if (slotData.quantity > 1) {
-                    const qtyText = this.scene.add.text(
-                        this.SLOT_SIZE / 3,
-                        this.SLOT_SIZE / 3,
-                        slotData.quantity.toString(),
-                        { fontSize: '14px', color: '#FFFFFF', stroke: '#000000', strokeThickness: 3 }
+                
+                // Create item sprite
+                const itemSprite = this.scene.add.sprite(0, 0, item.texture);
+                itemSprite.setScale(0.5);
+                
+                // Add quantity text if stackable and quantity > 1
+                let quantityText = null;
+                if (item.stackable && item.quantity && item.quantity > 1) {
+                    quantityText = this.scene.add.text(
+                        this.SLOT_SIZE / 2 - 5, 
+                        this.SLOT_SIZE / 2 - 5, 
+                        item.quantity.toString(), 
+                        { fontSize: '12px', color: '#ffffff' }
                     );
-                    slot.add(qtyText);
+                    quantityText.setOrigin(1, 1);
+                    slot.add(quantityText);
                 }
-
-                // Add to slot in correct order (border behind sprite)
-                slot.add(rarityBorder);
+                
+                // Add rarity border based on item rarity
+                this.addRarityBorder(slot, item.rarity);
+                
+                // Add sprite to slot
                 slot.add(itemSprite);
             }
         });
@@ -578,7 +578,7 @@ export default class InventoryUI {
 
         // Background
         const bg = this.scene.add.rectangle(0, 0, 200, 120, 0x000000, 0.8);
-        bg.setStrokeStyle(2, this.getRarityColor(item.rarity));
+        bg.setStrokeStyle(2, this.getRarityColor(item.rarity as unknown as ItemRarity));
         tooltip.add(bg);
 
         // Item name
@@ -586,7 +586,7 @@ export default class InventoryUI {
             0,
             -45,
             item.name,
-            { fontSize: '16px', color: this.getRarityTextColor(item.rarity), fontStyle: 'bold' }
+            { fontSize: '16px', color: this.getRarityTextColor(item.rarity as unknown as ItemRarity), fontStyle: 'bold' }
         );
         nameText.setOrigin(0.5, 0);
         tooltip.add(nameText);
@@ -615,7 +615,7 @@ export default class InventoryUI {
         const valueText = this.scene.add.text(
             0,
             descText.y + descText.height + 10,
-            `Value: ${item.value}`,
+            `Value: ${(item as any).value || 0}`,
             { fontSize: '12px', color: '#FFFF00' }
         );
         valueText.setOrigin(0.5, 0);
@@ -688,8 +688,16 @@ export default class InventoryUI {
      * Hide the inventory UI
      */
     public hide(): void {
-        this.container?.setVisible(false);
-        this.isVisible = false;
+        // Hide all UI elements
+        this.setVisible(false);
+        
+        // Destroy the background if it exists
+        if (this.background) {
+            this.background.destroy();
+            this.background = null;
+        }
+        
+        // Any additional hide logic here
 
         // Clean up any dragged item
         this.cleanupDraggedItem();
@@ -753,5 +761,35 @@ export default class InventoryUI {
             // Position tooltip relative to container
             tooltip.setPosition(x - containerX, y - containerY - 80);
         }
+    }
+
+    public setBackground(background: Phaser.GameObjects.Rectangle): void {
+        this.background = background;
+    }
+
+    private setVisible(visible: boolean): void {
+        this.container?.setVisible(visible);
+        this.isVisible = visible;
+    }
+
+    /**
+     * Get the texture for an item with proper fallback
+     */
+    private getItemTexture(item: GameItem): string {
+        // Try to get texture from various places
+        if (typeof item.type === 'string') {
+            return item.type + '-default';
+        }
+        return 'item-default';
+    }
+
+    private addRarityBorder(slot: Phaser.GameObjects.Container, rarity: ItemRarity): void {
+        // Add rarity border based on item rarity
+        const rarityColor = this.getRarityColor(rarity);
+        const rarityBorder = this.scene.add.rectangle(0, 0, this.SLOT_SIZE, this.SLOT_SIZE, rarityColor, 0);
+        rarityBorder.setStrokeStyle(2, rarityColor);
+        
+        // Add to slot in correct order (border behind sprite)
+        slot.add(rarityBorder);
     }
 } 

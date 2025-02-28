@@ -1,26 +1,24 @@
 import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
-import Enemy from "../entities/enemy";
-import Base from "../entities/base";
-import Player from "../entities/player";
-import ServiceLocator from "../utils/service-locator";
+import Enemy from "../entities/enemy/enemy";
+import Base from "../entities/base/base";
+import Player from "../entities/player/player";
 import EntityManager from "../managers/entity-manager";
-import { EventBus } from "../utils/event-bus";
+import { EventBus } from "../core/event-bus";
 
 export default class CombatSystem {
     private scene: GameScene;
     private entityManager: EntityManager;
     private eventBus: EventBus;
 
-    constructor(scene: GameScene) {
+    constructor(
+        scene: GameScene,
+        entityManager: EntityManager,
+        eventBus: EventBus
+    ) {
         this.scene = scene;
-        
-        // Register with service locator
-        ServiceLocator.getInstance().register('combatSystem', this);
-        
-        // Get required services
-        this.entityManager = ServiceLocator.getInstance().get<EntityManager>('entityManager')!;
-        this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
+        this.entityManager = entityManager;
+        this.eventBus = eventBus;
         
         this.setupCollisions();
     }

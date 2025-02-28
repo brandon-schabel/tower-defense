@@ -1,14 +1,13 @@
-import { 
-    ItemType, 
-    ItemRarity, 
-    ResourceItem, 
-    HealthItem, 
-    WeaponItem, 
-    BlueprintItem, 
-    UpgradeItem, 
-    GameItem 
+import {
+    ItemType,
+    ItemRarity,
+    ResourceItem,
+    HealthItem,
+    WeaponItem,
+    BlueprintItem,
+    UpgradeItem,
+    GameItem
 } from '../types/item';
-import { TowerType } from '../settings';
 
 // Resource items
 export const RESOURCE_ITEMS: Record<string, ResourceItem> = {
@@ -99,7 +98,12 @@ export const WEAPON_ITEMS: Record<string, WeaponItem> = {
         range: 200,
         cooldown: 300,
         projectileType: 'player',
-        tier: 1
+        tier: 1,
+        properties: {
+            damage: 15,
+            range: 200,
+            fireRate: 300,
+        }
     },
     'rapid-shooter': {
         id: 'rapid-shooter',
@@ -114,7 +118,12 @@ export const WEAPON_ITEMS: Record<string, WeaponItem> = {
         range: 180,
         cooldown: 150,
         projectileType: 'player-rapid',
-        tier: 1
+        tier: 1,
+        properties: {
+            damage: 10,
+            range: 180,
+            fireRate: 150,
+        }
     },
     'power-cannon': {
         id: 'power-cannon',
@@ -129,7 +138,12 @@ export const WEAPON_ITEMS: Record<string, WeaponItem> = {
         range: 250,
         cooldown: 800,
         projectileType: 'player-power',
-        tier: 2
+        tier: 2,
+        properties: {
+            damage: 40,
+            range: 250,
+            fireRate: 800,
+        }
     }
 };
 

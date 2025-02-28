@@ -1,19 +1,17 @@
 import Phaser from "phaser";
-import GameScene from "../scenes/game-scene";
-import { TowerType, TowerSettings, GAME_SETTINGS } from "../settings";
-import Enemy from "./enemy";
-import { HealthComponent } from "../utils/health-component";
-import ServiceLocator from "../utils/service-locator";
-import TileMapManager from "../managers/tile-map-manager";
-import EntityManager from "../managers/entity-manager";
-import CombatSystem from "../systems/combat-system";
-import { EventBus } from "../utils/event-bus";
+import GameScene from "../../scenes/game-scene";
+import { TowerType, type TowerSettings, type TowerConfig, GAME_SETTINGS } from "../../settings";
+import Enemy from "../enemy/enemy";
+import { HealthComponent } from "../components/health-component";
+import TileMapManager from "../../managers/tile-map-manager";
+import EntityManager from "../../managers/entity-manager";
+import CombatSystem from "../../systems/combat-system";
+import { EventBus } from "../../core/event-bus";
 
 export default class Tower extends Phaser.Physics.Arcade.Sprite {
     towerType: TowerType;
-    private towerData: TowerSettings;
+    private towerData: TowerConfig;
     private lastShotTime: number = 0;
-    // @ts-ignore
     private shootCooldown: number | null = null;
     private healthComponent: HealthComponent;
     private speedLevel: number = 0;
@@ -38,12 +36,27 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     private eventBus: EventBus;
     private entityManager: EntityManager;
     private combatSystem: CombatSystem;
+    private tileMapManager: TileMapManager;
+    protected gameScene: GameScene;
 
-    constructor(scene: GameScene, tileX: number, tileY: number, type: TowerType) {
-        const tileMapManager = ServiceLocator.getInstance().get<TileMapManager>('tileMapManager')!;
+    constructor(
+        scene: GameScene,
+        tileX: number,
+        tileY: number,
+        type: TowerType,
+        tileMapManager: TileMapManager,
+        eventBus: EventBus,
+        entityManager: EntityManager,
+        combatSystem: CombatSystem
+    ) {
         const worldPos = tileMapManager.tileToWorld(tileX, tileY);
         super(scene, worldPos.x, worldPos.y, type);
         this.towerType = type;
+        this.gameScene = scene;
+        this.tileMapManager = tileMapManager;
+        this.eventBus = eventBus;
+        this.entityManager = entityManager;
+        this.combatSystem = combatSystem;
 
         this.towerData = GAME_SETTINGS.towers[type];
         this.tileX = tileX;
@@ -51,18 +64,13 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         this.tileWidth = this.towerData.size.width;
         this.tileHeight = this.towerData.size.height;
 
-        // Get services from service locator
-        this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
-        this.entityManager = ServiceLocator.getInstance().get<EntityManager>('entityManager')!;
-        this.combatSystem = ServiceLocator.getInstance().get<CombatSystem>('combatSystem')!;
-
         scene.add.existing(this);
         scene.physics.add.existing(this, true);
         this.setOrigin(0.5, 0.5);
         this.setScale(this.towerData.scale);
 
         this.healthComponent = new HealthComponent(this, scene, this.towerData.health, this.towerData.health, () => {
-            scene.removeTower(this);
+            this.gameScene.removeTower(this);
             this.destroyTower();
         });
 
@@ -73,9 +81,6 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
             'tower',
             this.getId()
         );
-        
-        // Register with service locator
-        ServiceLocator.getInstance().register(`tower_${this.getId()}`, this);
     }
 
     private getCurrentShootCooldown(): number {
@@ -87,7 +92,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         const baseSpeed = this.towerData.shootCooldown;
         const speedMultiplier = 1 - (this.speedLevel * 0.1); // 10% reduction per level
         const tierMultiplier = this.tierMultipliers.speed[this.tier - 1];
-        
+
         return baseSpeed * speedMultiplier / tierMultiplier;
     }
 
@@ -96,13 +101,13 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         const baseRange = this.towerData.range;
         const rangeMultiplier = 1 + (this.rangeLevel * 0.15); // 15% increase per level
         const tierMultiplier = this.tierMultipliers.range[this.tier - 1];
-        
+
         // Apply special power bonus if applicable
         let specialBonus = 1;
         if (this.specialPower === "ice") {
             specialBonus = 1.2; // Ice towers get 20% more range
         }
-        
+
         return baseRange * rangeMultiplier * tierMultiplier * specialBonus;
     }
 
@@ -111,7 +116,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         const baseDamage = this.towerData.damage;
         const damageMultiplier = 1 + (this.damageLevel * 0.2); // 20% increase per level
         const tierMultiplier = this.tierMultipliers.damage[this.tier - 1];
-        
+
         // Apply special power bonus if applicable
         let specialBonus = 1;
         if (this.specialPower === "fire") {
@@ -121,7 +126,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
             // This is handled in the shoot method
             specialBonus = 1.2; // Base damage increase
         }
-        
+
         return Math.round(baseDamage * damageMultiplier * tierMultiplier * specialBonus);
     }
 
@@ -136,7 +141,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         if (this.tier >= this.maxTier) return Infinity;
         const baseCost = this.towerData.price;
         const tierFactor = Math.pow(2, this.tier); // Exponential increase
-        
+
         return Math.round(baseCost * 0.75 * tierFactor);
     }
 
@@ -211,7 +216,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         if (!this.specialPower) {  // Only allow one special power
             this.specialPower = power;
         }
-        
+
         // Visual effect based on power
         if (power === "fire") this.setTint(0xff6600);
         else if (power === "ice") this.setTint(0x66ffff);
@@ -254,14 +259,14 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
 
     public shoot(target: Phaser.Physics.Arcade.Sprite) {
         let damage = this.getCurrentDamage();
-        
+
         // Handle critical hits
         if (this.specialPower === "critical" && Math.random() < 0.25) {
             damage *= 2;
         }
-        
+
         let projectileType = 'normal';
-        
+
         // Set projectile type based on special power
         if (this.specialPower === "fire") {
             projectileType = 'fire';
@@ -270,12 +275,13 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         } else if (this.specialPower === "critical" && Math.random() < 0.25) {
             projectileType = 'critical';
         }
-        
+
         this.combatSystem.shootProjectile(this, target.x, target.y, damage, projectileType);
         this.shotsFired++;
     }
 
     public registerKill(enemy: Enemy, damage: number) {
+        console.log(`Tower ${this.towerType} killed enemy at (${enemy.x}, ${enemy.y})`);
         this.enemiesKilled++;
         this.damageDealt += damage;
     }
@@ -293,22 +299,22 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     }
 
     update() {
-        if (!this.scene || !this.active) return;
+        if (!this.gameScene || !this.active) return;
         this.healthComponent.update();
         this.handleShooting();
     }
 
     private handleShooting() {
-        const currentTime = this.scene.time.now;
-        
+        const currentTime = this.gameScene.time.now;
+
         if (currentTime - this.lastShotTime < this.getCurrentShootCooldown()) {
             return;
         }
-        
-        if (this.towerType === 'area-tower') {
-            this.handleAreaTowerShooting(currentTime, this.scene as GameScene);
+
+        if (this.towerType === TowerType.Area) {
+            this.handleAreaTowerShooting(currentTime, this.gameScene as GameScene);
         } else {
-            this.handleSingleTargetTowerShooting(currentTime, this.scene as GameScene, this.towerType);
+            this.handleSingleTargetTowerShooting(currentTime, this.gameScene as GameScene, this.towerType);
         }
     }
 
@@ -343,8 +349,11 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     }
 
     private handleSingleTargetTowerShooting(currentTime: number, gameScene: GameScene, projectileType: string) {
-        const target = this.findNearestEnemy(gameScene);
+        // Use projectileType for logging or customizing behavior if needed
+        console.log(`Handling ${projectileType} shooting`);
         
+        const target = this.findNearestEnemy(gameScene);
+
         if (target) {
             this.lastShotTime = currentTime;
             this.shoot(target);
@@ -352,7 +361,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     }
 
     private findNearestEnemy(gameScene: GameScene): Phaser.Physics.Arcade.Sprite | null {
-        const enemies = gameScene.getEnemies().filter(enemy => enemy.active && enemy instanceof Enemy);
+        const enemies = this.entityManager.getEnemies().filter(enemy => enemy.active && enemy instanceof Enemy);
         if (enemies.length === 0) return null;
         return enemies.reduce((nearest: Phaser.Physics.Arcade.Sprite | null, enemy) => {
             const distance = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
@@ -367,7 +376,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         if (!this.active) return; // Exit if the tower is already destroyed
         console.log(`${this.towerType} taking ${damage} damage`);
         this.healthComponent.takeDamage(damage);
-        
+
         // Emit damage event
         this.eventBus.emit('tower-damaged', {
             towerId: this.getId(),
@@ -378,8 +387,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
 
     // Override destroy to free up tiles
     destroyTower() {
-        const tileMapManager = (this.scene as GameScene).getTileMapManager();
-        tileMapManager.releaseTiles(this.tileX, this.tileY, this.tileWidth, this.tileHeight);
+        this.tileMapManager.releaseTiles(this.tileX, this.tileY, this.tileWidth, this.tileHeight);
         this.destroy();
     }
 

@@ -1,7 +1,7 @@
 // src/scenes/base-scene.ts
 import Phaser from "phaser";
 import { GAME_SETTINGS } from "../settings";
-import { EnemyType } from "../types/enemy-type";
+import { EnemyType } from "../entities/enemy/enemy-type";
 
 export abstract class BaseScene extends Phaser.Scene {
     protected setupPhysics(): void {
@@ -29,7 +29,7 @@ export abstract class BaseScene extends Phaser.Scene {
 
         // Tower assets
         Object.entries(GAME_SETTINGS.towers).forEach(([key, data]) => {
-            this.load.image(key, `assets/${data.texture}.svg`);
+            this.load.image(key, `assets/${(data as any).texture}.svg`);
         });
 
         // Enemy assets - Fix texture loading to use consistent keys with Enemy class

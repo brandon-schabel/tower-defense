@@ -1,15 +1,14 @@
 import Phaser from "phaser";
-import GameScene from "../scenes/game-scene";
-import { HealthBar } from "../utils/health-bar";
-import { GameItem } from "../types/item";
-import Player from "./player";
-import { HealthComponent } from "../utils/health-component";
-import { CrateType, CrateContents } from "../types/crate-types";
-import ServiceLocator from "../utils/service-locator";
-import TileMapManager from "../managers/tile-map-manager";
-import ItemDropManager from "../managers/item-drop-manager";
-import GameState from "../utils/game-state";
-import { EventBus } from "../utils/event-bus";
+import GameScene from "../../scenes/game-scene";
+import { HealthBar } from "../../utils/health-bar";
+import { GameItem } from "../../types/item";
+import Player from "../player/player";
+import { HealthComponent } from "../components/health-component";
+import { CrateType, CrateContents } from "../../types/crate-types";
+import TileMapManager from "../../managers/tile-map-manager";
+import ItemDropManager from "../../managers/item-drop-manager";
+import GameState from "../../utils/game-state";
+import { EventBus } from "../../core/event-bus";
 
 
 export default class Crate extends Phaser.Physics.Arcade.Sprite {
@@ -22,16 +21,22 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
     private tileY: number;
     private broken: boolean = false;
     private eventBus: EventBus;
+    private tileMapManager: TileMapManager;
+    private itemDropManager: ItemDropManager;
+    private gameState: GameState;
 
     constructor(
         scene: GameScene,
         tileX: number,
         tileY: number,
         type: CrateType,
+        tileMapManager: TileMapManager,
+        eventBus: EventBus,
+        itemDropManager: ItemDropManager,
+        gameState: GameState,
         health: number = 50,
         contents: CrateContents = { resources: 50 }
     ) {
-        const tileMapManager = ServiceLocator.getInstance().get<TileMapManager>('tileMapManager')!;
         const worldPos = tileMapManager.tileToWorld(tileX, tileY);
 
         super(scene, worldPos.x, worldPos.y, `crate-${type}`);
@@ -48,7 +53,10 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         this.contents = contents;
         this.tileX = tileX;
         this.tileY = tileY;
-        this.eventBus = ServiceLocator.getInstance().get<EventBus>('eventBus')!;
+        this.eventBus = eventBus;
+        this.tileMapManager = tileMapManager;
+        this.itemDropManager = itemDropManager;
+        this.gameState = gameState;
 
         scene.add.existing(this);
         scene.physics.add.existing(this, true); // true = static body
@@ -73,9 +81,6 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         this.healthBar = new HealthBar(scene, this, this.maxHealth);
 
         this.on('pointerdown', this.handleCrateClick, this);
-        
-        // Register with service locator with a unique ID
-        ServiceLocator.getInstance().register(`crate_${tileX}_${tileY}`, this);
     }
 
     private handleCrateClick() {
@@ -110,12 +115,9 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         if (this.broken) return;
         this.broken = true;
 
-        const itemDropManager = ServiceLocator.getInstance().get<ItemDropManager>('itemDropManager')!;
-        const gameState = ServiceLocator.getInstance().get<GameState>('gameState')!;
-
         // Drop resources if any
         if (this.contents.resources) {
-            gameState.earnResources(this.contents.resources);
+            this.gameState.earnResources(this.contents.resources);
 
             // Show floating text for resources
             const resourceText = this.scene.add.text(
@@ -137,7 +139,7 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         // Drop items if any
         if (this.contents.items && this.contents.items.length > 0) {
             this.contents.items.forEach((item: GameItem) => {
-                itemDropManager.dropItem(item, this.x, this.y);
+                this.itemDropManager.dropItem(item, this.x, this.y);
             });
         }
 
@@ -156,8 +158,7 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
         });
 
         // Free up the tile
-        const tileMapManager = ServiceLocator.getInstance().get<TileMapManager>('tileMapManager')!;
-        tileMapManager.releaseTiles(this.tileX, this.tileY, 1, 1);
+        this.tileMapManager.releaseTiles(this.tileX, this.tileY, 1, 1);
         
         // Emit event
         this.eventBus.emit('crate-broken', {

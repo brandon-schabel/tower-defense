@@ -1,14 +1,20 @@
 import GameScene from "../scenes/game-scene";
-import Player from "../entities/player";
-import Tower from "../entities/tower";
-import Enemy from "../entities/enemy";
-import Base from "../entities/base";
-import PowerUp, { PowerUpType } from "../entities/power-up";
-import Crate from "../entities/crate";
-import { GAME_SETTINGS, TowerType,  } from "../settings";
-import { EnemyType } from "../types/enemy-type";
+import Player from "../entities/player/player";
+import Tower from "../entities/tower/tower";
+import Enemy from "../entities/enemy/enemy";
+import Base from "../entities/base/base";
+import PowerUp, { PowerUpType } from "../entities/powerups/powerup";
+import Crate from "../entities/crate/crate";
+import { GAME_SETTINGS, TowerType } from "../settings";
+import { EnemyType } from "../entities/enemy/enemy-type";
 import { CrateContents, CrateType } from "../types/crate-types";
 import { gameConfig } from "../utils/app-config";
+import TileMapManager from "../managers/tile-map-manager";
+import { EventBus } from "../core/event-bus";
+import EntityManager from "../managers/entity-manager";
+import CombatSystem from "../systems/combat-system";
+import ItemDropManager from "../managers/item-drop-manager";
+import GameState from "../utils/game-state";
 
 /**
  * Define the EnemyAbility interface outside the class
@@ -24,16 +30,67 @@ interface EnemyAbility {
  */
 export default class EntityFactory {
   private scene: GameScene;
+  private tileMapManager: TileMapManager;
+  private eventBus: EventBus;
+  private entityManager: EntityManager | null = null;
+  private combatSystem: CombatSystem | null = null;
+  private itemDropManager: ItemDropManager | null = null;
+  private gameState: GameState | null = null;
 
-  constructor(scene: GameScene) {
+  constructor(
+    scene: GameScene, 
+    tileMapManager: TileMapManager,
+    eventBus: EventBus
+  ) {
     this.scene = scene;
+    this.tileMapManager = tileMapManager;
+    this.eventBus = eventBus;
+  }
+
+  /**
+   * Set entity manager after it's been created (to avoid circular dependencies)
+   */
+  setEntityManager(entityManager: EntityManager): void {
+    this.entityManager = entityManager;
+  }
+
+  /**
+   * Set combat system after it's been created (to avoid circular dependencies)
+   */
+  setCombatSystem(combatSystem: CombatSystem): void {
+    this.combatSystem = combatSystem;
+  }
+  
+  /**
+   * Set item drop manager after it's been created 
+   */
+  setItemDropManager(itemDropManager: ItemDropManager): void {
+    this.itemDropManager = itemDropManager;
+  }
+  
+  /**
+   * Set game state after it's been created
+   */
+  setGameState(gameState: GameState): void {
+    this.gameState = gameState;
   }
 
   /**
    * Create a player entity
    */
   createPlayer(x: number, y: number): Player {
-    const player = new Player(this.scene, x, y);
+    if (!this.entityManager || !this.combatSystem || !this.itemDropManager) {
+      throw new Error("Required dependencies not set in EntityFactory");
+    }
+    
+    const player = new Player(
+      this.scene, 
+      x, 
+      y, 
+      this.eventBus,
+      this.combatSystem,
+      this.itemDropManager
+    );
     return player;
   }
 
@@ -41,7 +98,12 @@ export default class EntityFactory {
    * Create a base entity
    */
   createBase(x: number, y: number): Base {
-    const base = new Base(this.scene, x, y);
+    const base = new Base(
+      this.scene, 
+      x, 
+      y, 
+      this.eventBus
+    );
     return base;
   }
 
@@ -49,7 +111,20 @@ export default class EntityFactory {
    * Create a tower entity
    */
   createTower(tileX: number, tileY: number, type: TowerType): Tower {
-    const tower = new Tower(this.scene, tileX, tileY, type);
+    if (!this.entityManager || !this.combatSystem) {
+      throw new Error("EntityManager or CombatSystem not set in EntityFactory");
+    }
+    
+    const tower = new Tower(
+      this.scene, 
+      tileX, 
+      tileY, 
+      type, 
+      this.tileMapManager,
+      this.eventBus,
+      this.entityManager,
+      this.combatSystem
+    );
     return tower;
   }
 
@@ -63,6 +138,10 @@ export default class EntityFactory {
     tier: number = 1,
     onDeath: () => void = () => { }
   ): Enemy | undefined {
+    if (!this.entityManager || !this.combatSystem || !this.itemDropManager || !this.tileMapManager) {
+      throw new Error("Required dependencies not set in EntityFactory");
+    }
+    
     // Get enemy config based on type and tier
     const enemyConfig = this.getEnemyConfig(type, tier);
     if (!enemyConfig) {
@@ -77,6 +156,11 @@ export default class EntityFactory {
       enemyConfig.health,
       enemyConfig.speed,
       onDeath,
+      this.eventBus,
+      this.itemDropManager,
+      this.combatSystem,
+      this.entityManager,
+      this.tileMapManager,
       type,
       tier
     );
@@ -95,7 +179,21 @@ export default class EntityFactory {
    * Create a power-up entity
    */
   createPowerUp(x: number, y: number, type: PowerUpType): PowerUp {
-    const powerUp = new PowerUp(this.scene, x, y, type);
+    if (!this.entityManager || !this.gameState) {
+      throw new Error("Required dependencies not set in EntityFactory");
+    }
+    
+    const player = this.entityManager.getUser();
+    
+    const powerUp = new PowerUp(
+      this.scene, 
+      x, 
+      y, 
+      type, 
+      this.eventBus,
+      player,
+      this.gameState
+    );
     return powerUp;
   }
 
@@ -109,6 +207,10 @@ export default class EntityFactory {
     health: number = 50,
     contents: CrateContents = { resources: 50 }
   ): Crate {
+    if (!this.itemDropManager || !this.gameState) {
+      throw new Error("Required dependencies not set in EntityFactory");
+    }
+    
     let crateContents: CrateContents; // Use a separate variable for contents
     switch (type) {
       case CrateType.Wood: crateContents = { resources: 20 }; break;
@@ -116,7 +218,19 @@ export default class EntityFactory {
       case CrateType.Gold: crateContents = { resources: 100, items: [] }; break; // Ensure items is initialized as array if needed
       default: crateContents = contents; // Default to provided contents if type is not matched
     }
-    const crate = new Crate(this.scene, tileX, tileY, type, health, crateContents);
+    
+    const crate = new Crate(
+      this.scene, 
+      tileX, 
+      tileY, 
+      type,
+      this.tileMapManager,
+      this.eventBus,
+      this.itemDropManager,
+      this.gameState,
+      health, 
+      crateContents
+    );
     return crate;
   }
 
@@ -125,39 +239,35 @@ export default class EntityFactory {
    * @private
    */
   private getEnemyConfig(type: EnemyType, tier: number): { health: number; speed: number; damage: number; abilities: EnemyAbility[] } | undefined {
-    const enemySettings = gameConfig.getConfig("enemies");
+    // Get the enemy settings from GAME_SETTINGS directly based on type
     const enemyTypeKey = this.getEnemyTypeKey(type);
-
+    
     if (!enemyTypeKey) {
       console.error(`Enemy type ${type} not found in GAME_SETTINGS.`);
       return undefined;
     }
-
-    const baseConfig = enemySettings?.[enemyTypeKey];
-
-    if (!baseConfig) {
-      console.error(`Enemy type ${type} not found in GAME_SETTINGS.`);
+    
+    // Get the enemy config
+    const enemySettings = GAME_SETTINGS.enemies[enemyTypeKey];
+    
+    if (!enemySettings) {
+      console.error(`Enemy settings not found for type ${type}`);
       return undefined;
     }
-
-    // Apply tier multipliers
-    const tierMultiplier = 1 + (tier - 1) * 0.5; // 50% increase per tier
-
+    
+    // Calculate health based on baseHealth and tier
+    const health = enemySettings.baseHealth + (enemySettings.healthIncrementPerRound * (tier - 1));
+    
     return {
-      health: Math.round(baseConfig.baseHealth * tierMultiplier),
-      speed: baseConfig.speed * (1 + (tier - 1) * 0.2), // 20% speed increase per tier
-      damage: Math.round(baseConfig.damageToPlayer * tierMultiplier),
-      abilities: baseConfig.abilities ? [...baseConfig.abilities] : []
+      health,
+      speed: enemySettings.speed,
+      damage: enemySettings.damageToPlayer,
+      abilities: enemySettings.abilities || []
     };
   }
 
   private getEnemyTypeKey(type: EnemyType): keyof typeof GAME_SETTINGS.enemies | undefined {
-    const lowerCaseType = type.toLowerCase();
-    for (const key in GAME_SETTINGS.enemies) {
-      if (key.toLowerCase() === lowerCaseType) {
-        return key as keyof typeof GAME_SETTINGS.enemies;
-      }
-    }
-    return undefined;
+    // Get enemy type key as string
+    return type.toString() as keyof typeof GAME_SETTINGS.enemies;
   }
 }

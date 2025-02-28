@@ -1,28 +1,25 @@
-// src/coordinators/game-coordinator.ts
-import Phaser from "phaser";
 import GameScene from "../scenes/game-scene";
 import EntityManager from "../managers/entity-manager";
-import RoundManager from "../managers/round-manager";
-import BuildController from "../managers/build-controller";
+import RoundManager from "../systems/round-manager";
+import BuildSystem from "../systems/build-system";
 import TowerManager from "../managers/tower-manager";
 import CombatSystem from "../systems/combat-system";
 import ItemDropManager from "../managers/item-drop-manager";
 import UIManager from "../managers/ui-manager";
 import GameState from "../utils/game-state";
-import { EventBus } from "../utils/event-bus";
+import { EventBus } from "./event-bus";
 import { DifficultyLevel } from "../settings";
-import ServiceLocator from "../utils/service-locator";
 import TileMapManager from '../managers/tile-map-manager';
 
 /**
  * GameCoordinator acts as a central hub for accessing all game managers
- * through the service locator pattern.
+ * through dependency injection.
  */
 export default class GameCoordinator {
     private scene: GameScene;
     private entityManager: EntityManager;
     private roundManager: RoundManager;
-    private buildController: BuildController;
+    private buildController: BuildSystem;
     private towerManager: TowerManager;
     private combatSystem: CombatSystem;
     private itemDropManager: ItemDropManager;
@@ -30,36 +27,33 @@ export default class GameCoordinator {
     private gameState: GameState;
     private eventBus: EventBus;
     private difficultyLevel: DifficultyLevel;
+    private tileMapManager: TileMapManager;
     
-    constructor(scene: GameScene) {
+    constructor(
+        scene: GameScene,
+        entityManager: EntityManager,
+        roundManager: RoundManager,
+        buildController: BuildSystem,
+        towerManager: TowerManager,
+        combatSystem: CombatSystem,
+        itemDropManager: ItemDropManager,
+        gameState: GameState,
+        eventBus: EventBus,
+        tileMapManager: TileMapManager,
+        uiManager: UIManager
+    ) {
         this.scene = scene;
-        
-        // Get references to all managers
-        this.gameState = scene.getGameState();
-        this.entityManager = scene.getEntityManager();
-        this.roundManager = scene.getRoundManager();
-        this.buildController = scene.getBuildController();
-        this.towerManager = scene.getTowerManager();
-        this.combatSystem = scene.getCombatSystem();
-        this.itemDropManager = scene.getItemDropManager();
-        this.eventBus = scene.eventBus;
+        this.gameState = gameState;
+        this.entityManager = entityManager;
+        this.roundManager = roundManager;
+        this.buildController = buildController;
+        this.towerManager = towerManager;
+        this.combatSystem = combatSystem;
+        this.itemDropManager = itemDropManager;
+        this.eventBus = eventBus;
         this.difficultyLevel = scene.getDifficultyLevel();
-        
-        // Create UI Manager
-        this.uiManager = new UIManager(scene);
-        
-        // Register with service locator
-        const serviceLocator = ServiceLocator.getInstance();
-        serviceLocator.register('gameCoordinator', this);
-        serviceLocator.register('gameState', this.gameState);
-        serviceLocator.register('entityManager', this.entityManager);
-        serviceLocator.register('roundManager', this.roundManager);
-        serviceLocator.register('buildController', this.buildController);
-        serviceLocator.register('towerManager', this.towerManager);
-        serviceLocator.register('combatSystem', this.combatSystem);
-        serviceLocator.register('itemDropManager', this.itemDropManager);
-        serviceLocator.register('uiManager', this.uiManager);
-        serviceLocator.register('eventBus', this.eventBus);
+        this.tileMapManager = tileMapManager;
+        this.uiManager = uiManager;
         
         // Setup event handlers
         this.setupEventHandlers();
@@ -129,7 +123,7 @@ export default class GameCoordinator {
         return this.roundManager;
     }
     
-    public getBuildController(): BuildController {
+    public getBuildController(): BuildSystem {
         return this.buildController;
     }
     
@@ -150,7 +144,7 @@ export default class GameCoordinator {
     }
 
     public getTileMapManager(): TileMapManager {
-        return ServiceLocator.getInstance().get<TileMapManager>('tileMapManager')!;
+        return this.tileMapManager;
     }
 
     public getEventBus(): EventBus {
