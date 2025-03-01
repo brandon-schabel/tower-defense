@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { DroppedItem, GameItem, ItemRarity, ItemType, ResourceItem, HealthItem, WeaponItem } from '../types/item';
-import TileMapManager from './tile-map-manager';
-import GameScene from '../scenes/game-scene';
+import { TileMapManager } from './tile-map-manager';
+import { GameScene } from '../scenes/game-scene';
 import { GAME_SETTINGS } from '../settings';
 import { EventBus } from '../core/event-bus';
 
-export default class ItemDropManager {
+export class ItemDropManager {
     private scene: GameScene;
     private droppedItems: DroppedItem[] = [];
     private itemGroup: Phaser.GameObjects.Group;

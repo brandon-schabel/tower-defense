@@ -1,264 +1,165 @@
-import GameScene from "../scenes/game-scene";
-import EntityManager from "../managers/entity-manager";
-import RoundSystem from "../systems/round-system";
-import BuildSystem from "../systems/build-system";
-import TowerManager from "../managers/tower-manager";
-import CombatSystem from "../systems/combat-system";
-import ItemDropManager from "../managers/item-drop-manager";
-import UIManager from "../managers/ui-manager";
-import GameState from "../utils/game-state";
+import { GameScene } from "../scenes/game-scene";
+import { EntityManager } from "../managers/entity-manager";
+import { BuildSystem } from "../systems/build-system";
+import { RoundSystem } from "../systems/round-system";
+import { CollisionSystem } from "../systems/collision-system";
+import { UIManager } from "../managers/ui-manager";
+import { TowerManager } from "../managers/tower-manager";
+import { GameState, GameStateEnum } from "../utils/game-state";
 import { EventBus } from "./event-bus";
-import { DifficultyLevel } from "../settings";
-import TileMapManager from '../managers/tile-map-manager';
-import GameStateManager from '../managers/game-state-manager';
-import { GameStateEnum } from '../utils/game-state';
+import { TowerType } from "../settings";
+import { GameSystemBuilder } from "./game-system-builder"; 
 
 /**
- * GameCoordinator acts as a central hub for accessing all game managers
- * through dependency injection.
+ * GameCoordinator orchestrates all game systems and managers.
+ * It focuses on coordinating interactions between systems rather than initialization.
  */
-export default class GameCoordinator {
+export class GameCoordinator {
     private scene: GameScene;
-    private entityManager: EntityManager;
-    private roundManager: RoundSystem;
-    private buildController: BuildSystem;
-    private towerManager: TowerManager;
-    private combatSystem: CombatSystem;
-    private itemDropManager: ItemDropManager;
-    private uiManager: UIManager;
-    private gameState: GameState;
     private eventBus: EventBus;
-    private difficultyLevel: DifficultyLevel;
-    private tileMapManager: TileMapManager;
-    private gameStateManager: GameStateManager;
-    
-    constructor(
-        scene: GameScene,
-        entityManager: EntityManager,
-        roundManager: RoundSystem,
-        buildController: BuildSystem,
-        towerManager: TowerManager,
-        combatSystem: CombatSystem,
-        itemDropManager: ItemDropManager,
-        gameState: GameState,
-        eventBus: EventBus,
-        tileMapManager: TileMapManager,
-        uiManager: UIManager
-    ) {
+    private gameState: GameState;
+
+    // Managers
+    private entityManager!: EntityManager;
+    private uiManager!: UIManager;
+    private towerManager!: TowerManager;
+
+    // Systems
+    private buildSystem!: BuildSystem;
+    private roundSystem!: RoundSystem;
+    private collisionSystem!: CollisionSystem;
+
+    constructor(scene: GameScene) {
         this.scene = scene;
-        this.gameState = gameState;
-        this.entityManager = entityManager;
-        this.roundManager = roundManager;
-        this.buildController = buildController;
-        this.towerManager = towerManager;
-        this.combatSystem = combatSystem;
-        this.itemDropManager = itemDropManager;
-        this.eventBus = eventBus;
-        this.difficultyLevel = scene.getDifficultyLevel();
-        this.tileMapManager = tileMapManager;
-        this.uiManager = uiManager;
-        
-        // Create game state manager
-        this.gameStateManager = new GameStateManager(scene, gameState, eventBus);
-        this.gameStateManager.setRoundSystem(roundManager);
-        this.gameStateManager.setUIManager(uiManager);
-        
-        // Setup event handlers
+        this.eventBus = new EventBus();
+        this.gameState = new GameState(this.eventBus);
+
+        // Use builder to handle initialization
+        this.initializeGameSystems();
         this.setupEventHandlers();
     }
-    
+
+    private initializeGameSystems(): void {
+        // Use the builder to construct all systems in the right order
+        const builder = new GameSystemBuilder(this.scene, this.eventBus, this.gameState)
+            .buildManagers()
+            .buildSystems()
+            .buildUIComponents();
+
+        // Get references to built components
+        const { managers, systems } = builder.getResult();
+
+        // Store direct references to frequently used managers/systems
+        this.entityManager = managers.entityManager;
+        this.uiManager = managers.uiManager;
+        this.towerManager = managers.towerManager;
+        this.buildSystem = systems.buildSystem;
+        this.roundSystem = systems.roundSystem;
+        this.collisionSystem = systems.collisionSystem;
+
+        // Connect game state to key systems
+        this.gameState.setRoundSystem(this.roundSystem);
+        this.gameState.setUIManager(this.uiManager);
+    }
+
     private setupEventHandlers(): void {
-        // Handle enemy defeat
-        this.eventBus.on('enemy-defeated', () => {
-            this.roundManager.enemyDefeated();
-        });
-        
-        // Handle base damage
-        this.eventBus.on('base-damaged', () => {
-            this.checkGameOver();
-        });
-        
-        // Handle player health change
-        this.eventBus.on('player-health-changed', (health: number) => {
-            if (health <= 0) {
-                this.gameOver(false);
-            }
+        // Game state transitions
+        this.eventBus.on('start-game', () => {
+            this.gameState.transition(GameStateEnum.BUILD_PHASE);
         });
 
-        // Handle game state change events from UI
-        this.eventBus.on('start-new-game', () => {
-            this.startNewGame();
-        });
-        
-        this.eventBus.on('return-to-menu', () => {
-            this.returnToMenu();
-        });
-        
-        this.eventBus.on('resume-game', () => {
-            this.resumeGame();
-        });
-        
         this.eventBus.on('start-round', () => {
-            this.startRound();
+            this.roundSystem.startRound();
         });
-        
+
         this.eventBus.on('start-next-round', () => {
-            this.startNextRound();
+            this.roundSystem.startNextRound();
         });
-        
-        // Listen for game-state-changed events
-        this.eventBus.on('game-state-changed', (data: { prevState: GameStateEnum, newState: GameStateEnum }) => {
-            console.log(`Game state changed from ${data.prevState} to ${data.newState}`);
-            
-            // Perform any global state change actions here
-            if (data.newState === GameStateEnum.GAME_OVER) {
-                console.log('Game over state entered');
-                // Any additional game over actions
-            }
+
+        this.eventBus.on('enemy-defeated', () => {
+            this.roundSystem.enemyDefeated();
+        });
+
+        // Handle new game requests
+        this.eventBus.on('start-new-game', () => {
+            this.gameState.startNewGame();
+        });
+
+        // Handle menu return requests
+        this.eventBus.on('return-to-menu', () => {
+            this.gameState.returnToMenu();
+        });
+
+        // Handle resume game requests
+        this.eventBus.on('resume-game', () => {
+            this.gameState.unpause();
+            this.uiManager.hidePauseMenu();
+        });
+
+        // Tower placement
+        this.eventBus.on('tower-selected', (towerType: TowerType) => {
+            this.buildSystem.enterBuildMode(towerType);
         });
     }
 
-    /**
-     * Check if the game is over
-     */
-    private checkGameOver(): void {
-        const base = this.entityManager.getBase();
-        if (base && base.getHealth() <= 0) {
-            this.gameOver(false);
-        }
-    }
-    
-    public initGame(isNewGame: boolean): void {
-        if (!isNewGame) {
-            this.gameState.loadFromLocalStorage();
-        }
-        
-        // Apply research effects
-        this.applyResearchEffects();
-    }
-    
-    private applyResearchEffects(): void {
-        const researchTree = this.uiManager.getHUD().getResearchTree();
-        const towerDamageLevel = researchTree.getResearchLevel('tower-damage-1');
-        if (towerDamageLevel > 0) {
-            console.log(`Applying tower damage research level: ${towerDamageLevel}`);
-        }
-    }
-    
-    public update(): void {
-        // Update all systems that need per-frame updates
+    public update(time: number, delta: number): void {
+        // Skip updates if game is paused
+        if (this.gameState.isPaused()) return;
+
+        // Update game state
+        this.gameState.update();
+
+        // Update all managers and systems
         this.entityManager.update();
+        this.collisionSystem.update();
         this.towerManager.update();
-        this.uiManager.update();
-        
-        // Check round completion
-        this.roundManager.checkRoundCompletion();
+
+        // Update round system last as it might depend on entity states
+        this.roundSystem.checkRoundCompletion();
     }
-    
-    // Getters for managers
-    public getUIManager(): UIManager {
-        return this.uiManager;
+
+    public togglePause(): void {
+        if (this.gameState.isPaused()) {
+            this.gameState.unpause();
+            this.uiManager.hidePauseMenu();
+        } else {
+            this.gameState.pause();
+            this.uiManager.showPauseMenu();
+        }
     }
-    
+
+    // Accessor methods for GameScene to use
     public getEntityManager(): EntityManager {
         return this.entityManager;
     }
-    
-    public getRoundManager(): RoundSystem {
-        return this.roundManager;
+
+    public getBuildSystem(): BuildSystem {
+        return this.buildSystem;
     }
-    
-    public getBuildController(): BuildSystem {
-        return this.buildController;
+
+    public getRoundSystem(): RoundSystem {
+        return this.roundSystem;
     }
-    
+
+    public getUIManager(): UIManager {
+        return this.uiManager;
+    }
+
     public getTowerManager(): TowerManager {
         return this.towerManager;
-    }
-    
-    public setDifficulty(level: DifficultyLevel): void {
-        this.difficultyLevel = level;
-    }
-    
-    public getDifficultyLevel(): DifficultyLevel {
-        return this.difficultyLevel;
-    }
-
-    public getItemDropManager(): ItemDropManager {
-        return this.itemDropManager;
-    }
-
-    public getTileMapManager(): TileMapManager {
-        return this.tileMapManager;
     }
 
     public getEventBus(): EventBus {
         return this.eventBus;
     }
 
-    /**
-     * Start a new round
-     */
-    public startRound(): void {
-        // Verify we're in build phase before starting a round
-        if (this.gameState.isInState(GameStateEnum.BUILD_PHASE)) {
-            this.roundManager.startRound();
-        } else {
-            console.warn('Cannot start round: Not in build phase');
-        }
+    public getGameState(): GameState {
+        return this.gameState;
     }
 
-    /**
-     * Start the next round
-     */
-    public startNextRound(): void {
-        // Verify we're in build phase before starting a round
-        if (this.gameState.isInState(GameStateEnum.BUILD_PHASE)) {
-            this.roundManager.startNextRound();
-        } else {
-            console.warn('Cannot start next round: Not in build phase');
-        }
-    }
-
-    /**
-     * Handle game over
-     */
-    public gameOver(isVictory: boolean = false): void {
-        this.gameStateManager.gameOver(isVictory);
-    }
-
-    /**
-     * Pause the game
-     */
-    public pauseGame(): void {
-        this.gameStateManager.pauseGame();
-    }
-
-    /**
-     * Resume the game from pause
-     */
-    public resumeGame(): void {
-        this.gameStateManager.resumeGame();
-    }
-
-    /**
-     * Return to the main menu
-     */
-    public returnToMenu(): void {
-        this.gameStateManager.returnToMenu();
-    }
-
-    /**
-     * Start a new game
-     */
-    public startNewGame(): void {
-        this.gameStateManager.startNewGame();
-    }
-
-    /**
-     * Get the game state manager
-     */
-    public getGameStateManager(): GameStateManager {
-        return this.gameStateManager;
+    public cleanup(): void {
+        // Clean up all systems and managers
+        this.collisionSystem.destroy();
+        this.buildSystem.destroy();
     }
 }

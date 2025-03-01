@@ -1,12 +1,11 @@
 import Phaser from "phaser";
-import GameScene from "../scenes/game-scene";
-import Tower from "../entities/tower/tower";
+import { GameScene } from "../scenes/game-scene";
+import { Tower } from "../entities/tower/tower";
 import { EventBus } from "../core/event-bus";
-import EntityManager from "./entity-manager";
-import GameState from "../utils/game-state";
-import UIManager from "./ui-manager";
+import { EntityManager } from "./entity-manager";
+import { GameState } from "../utils/game-state";
 
-export default class TowerManager {
+export class TowerManager {
     private scene: GameScene;
     private selectedTower: Tower | null = null;
     private upgradePanel: Phaser.GameObjects.Container | null = null;

@@ -1,17 +1,17 @@
 import Phaser from "phaser";
-import GameScene from "../../scenes/game-scene";
+import { GameScene } from "../../scenes/game-scene";
 import { HealthBar } from "../../utils/health-bar";
 import { GameItem } from "../../types/item";
-import Player from "../player/player";
+import { Player } from "../player/player";
 import { HealthComponent } from "../components/health-component";
 import { CrateType, CrateContents } from "../../types/crate-types";
-import TileMapManager from "../../managers/tile-map-manager";
-import ItemDropManager from "../../managers/item-drop-manager";
-import GameState from "../../utils/game-state";
+import { TileMapManager } from "../../managers/tile-map-manager";
+import { ItemDropManager } from "../../managers/item-drop-manager";
+import { GameState } from "../../utils/game-state";
 import { EventBus } from "../../core/event-bus";
 
 
-export default class Crate extends Phaser.Physics.Arcade.Sprite {
+export class Crate extends Phaser.Physics.Arcade.Sprite {
     private healthComponent: HealthComponent;
     private maxHealth: number;
     private healthBar: HealthBar;
@@ -159,7 +159,7 @@ export default class Crate extends Phaser.Physics.Arcade.Sprite {
 
         // Free up the tile
         this.tileMapManager.releaseTiles(this.tileX, this.tileY, 1, 1);
-        
+
         // Emit event
         this.eventBus.emit('crate-broken', {
             position: { x: this.x, y: this.y },

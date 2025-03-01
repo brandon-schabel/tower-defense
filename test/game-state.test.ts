@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeEach, mock } from "bun:test";
-import GameState from "../src/utils/game-state";
+import { GameState } from "../src/utils/game-state";
 
 describe("GameState", () => {
   let gameState: GameState;

@@ -4,7 +4,7 @@ import { GAME_SETTINGS } from "../settings";
 /**
  * Manages the tile map for the game, handling placement validation and coordinate conversion
  */
-export default class TileMapManager {
+export class TileMapManager {
     private scene: Phaser.Scene;
     private tileSize: number;
     private mapWidth: number;

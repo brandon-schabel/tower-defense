@@ -399,7 +399,7 @@ export const GAME_SETTINGS: GameSettings = {
     towers: {
         [TowerType.Normal]: {
             name: 'Normal Tower',
-            texture: 'tower-normal',
+            texture: 'normal-tower',
             price: 100,
             range: 200,
             damage: 20,
@@ -412,7 +412,7 @@ export const GAME_SETTINGS: GameSettings = {
         },
         [TowerType.Sniper]: {
             name: 'Sniper Tower',
-            texture: 'tower-sniper',
+            texture: 'sniper-tower',
             price: 150,
             range: 300,
             damage: 30,
@@ -425,7 +425,7 @@ export const GAME_SETTINGS: GameSettings = {
         },
         [TowerType.Area]: {
             name: 'Area Tower',
-            texture: 'tower-area',
+            texture: 'area-tower',
             price: 200,
             range: 150,
             damage: 15,
@@ -438,7 +438,7 @@ export const GAME_SETTINGS: GameSettings = {
         },
         [TowerType.Laser]: {
             name: 'Laser Tower',
-            texture: 'tower-laser',
+            texture: 'laser-tower',
             price: 250,
             range: 250,
             damage: 40,
@@ -451,7 +451,7 @@ export const GAME_SETTINGS: GameSettings = {
         },
         [TowerType.Missile]: {
             name: 'Missile Tower',
-            texture: 'tower-missile',
+            texture: 'missile-tower',
             price: 300,
             range: 200,
             damage: 30,

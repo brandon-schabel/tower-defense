@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import TileMapManager from '../../managers/tile-map-manager';
-import Enemy from '../enemy/enemy';
-import Tower from '../tower/tower';
-import Player from '../player/player';
+import { TileMapManager } from '../../managers/tile-map-manager';
+import { Enemy }  from '../enemy/enemy';
+import { Tower } from '../tower/tower';
+import { Player } from '../player/player';
 
 /**
  * Manages complex movement behavior for game entities 

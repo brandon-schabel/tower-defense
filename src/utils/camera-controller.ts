@@ -1,7 +1,7 @@
 import Phaser from "phaser";
-import GameScene from "../scenes/game-scene";
+import { GameScene } from "../scenes/game-scene";
 
-export default class CameraController {
+export class CameraController {
     private scene: GameScene;
     private player: Phaser.Physics.Arcade.Sprite;
     private camera: Phaser.Cameras.Scene2D.Camera;

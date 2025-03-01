@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 /**
  * Class that manages inventory slots, adding/removing items and handling stacking
  */
-export default class InventoryManager extends EventEmitter {
+export class InventoryManager extends EventEmitter {
     private slots: (InventorySlot | null)[];
     private maxSlots: number;
 
@@ -19,6 +19,16 @@ export default class InventoryManager extends EventEmitter {
      */
     public getInventory(): (InventorySlot | null)[] {
         return [...this.slots];
+    }
+
+    /**
+     * Gets the list of items from the inventory for older API compatibility
+     * @returns Array of items from non-empty slots
+     */
+    public getItems(): GameItem[] {
+        return this.slots
+            .filter((slot): slot is InventorySlot => slot !== null)
+            .map(slot => slot.item);
     }
 
     /**
@@ -110,6 +120,17 @@ export default class InventoryManager extends EventEmitter {
         }
         
         return this.removeItemFromSlot(slotIndex, quantity) !== null;
+    }
+
+    /**
+     * Remove a specific item instance from inventory
+     * For backwards compatibility
+     * @param item The item object to remove
+     * @returns Whether the item was successfully removed
+     */
+    public removeItem(item: GameItem): boolean {
+        if (!item || !item.id) return false;
+        return this.removeItemById(item.id);
     }
 
     /**

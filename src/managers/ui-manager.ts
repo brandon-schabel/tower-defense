@@ -1,14 +1,14 @@
-import GameScene from "../scenes/game-scene";
-import HUD from "../ui/hud";
-import InventoryUI from "../ui/inventory-ui";
-import Tower from "../entities/tower/tower";
-import EntityManager from "./entity-manager";
+import { GameScene } from "../scenes/game-scene";
+import { HUD } from "../ui/hud";
+import { InventoryUI } from "../ui/inventory-ui";
+import { Tower } from "../entities/tower/tower";
+import { EntityManager } from "./entity-manager";
 import { EventBus } from "../core/event-bus";
 
-export default class UIManager {
+export class UIManager {
     private scene: GameScene;
-    private hud: HUD;
-    private inventoryUI: InventoryUI;
+    private hud!: HUD;
+    private inventoryUI!: InventoryUI;
     private isInventoryVisible: boolean = false;
     private entityManager: EntityManager;
     private eventBus: EventBus;
@@ -27,27 +27,35 @@ export default class UIManager {
         this.entityManager = entityManager;
         this.eventBus = eventBus;
         
-        // Initialize UI components
-        this.hud = new HUD(scene);
-        
-        // Get player from entity manager
-        const player = this.entityManager.getUser();
-        
-        // Initialize inventory UI with player's inventory if player exists
-        if (player) {
-            this.inventoryUI = new InventoryUI(scene, player.getInventory());
-        } else {
-            // Create a default inventory UI with null inventory
-            console.warn("Player not found when initializing UI. Using default inventory.");
-            this.inventoryUI = new InventoryUI(scene, null);
-        }
-        this.inventoryUI.hide();
-        
-        // Initialize UI containers for different game states
+        // Initialize UI containers first
         this.initializeUIContainers();
         
         // Set up event listeners
         this.setupEventListeners();
+        
+        // Delay HUD initialization until after the scene's create method completes
+        // This ensures all entities are fully initialized
+        this.scene.time.delayedCall(100, () => {
+            // Initialize HUD
+            this.hud = new HUD(scene);
+            
+            // Initialize inventory UI
+            try {
+                const player = this.entityManager.getUser();
+                if (player) {
+                    this.inventoryUI = new InventoryUI(scene, player.getInventory(), this.eventBus);
+                } else {
+                    console.warn("Player not yet available for inventory UI initialization");
+                    this.inventoryUI = new InventoryUI(scene, null, this.eventBus);
+                }
+                
+                // Hide inventory UI initially
+                this.inventoryUI.hide();
+            } catch (error) {
+                console.warn("Error initializing inventory UI:", error);
+                this.inventoryUI = new InventoryUI(scene, null, this.eventBus);
+            }
+        });
     }
     
     /**

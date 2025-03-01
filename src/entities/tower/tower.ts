@@ -1,14 +1,14 @@
 import Phaser from "phaser";
-import GameScene from "../../scenes/game-scene";
+import { GameScene } from "../../scenes/game-scene";
 import { TowerType, type TowerSettings, type TowerConfig, GAME_SETTINGS } from "../../settings";
-import Enemy from "../enemy/enemy";
+import { Enemy }  from "../enemy/enemy";
 import { HealthComponent } from "../components/health-component";
-import TileMapManager from "../../managers/tile-map-manager";
-import EntityManager from "../../managers/entity-manager";
-import CombatSystem from "../../systems/combat-system";
+import { TileMapManager } from "../../managers/tile-map-manager";
+import { EntityManager } from "../../managers/entity-manager";
+import { CollisionSystem }  from "../../systems/collision-system";
 import { EventBus } from "../../core/event-bus";
 
-export default class Tower extends Phaser.Physics.Arcade.Sprite {
+export class Tower extends Phaser.Physics.Arcade.Sprite {
     towerType: TowerType;
     private towerData: TowerConfig;
     private lastShotTime: number = 0;
@@ -35,7 +35,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     };
     private eventBus: EventBus;
     private entityManager: EntityManager;
-    private combatSystem: CombatSystem;
+    private combatSystem: CollisionSystem;
     private tileMapManager: TileMapManager;
     protected gameScene: GameScene;
 
@@ -47,7 +47,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
         tileMapManager: TileMapManager,
         eventBus: EventBus,
         entityManager: EntityManager,
-        combatSystem: CombatSystem
+        combatSystem: CollisionSystem
     ) {
         const worldPos = tileMapManager.tileToWorld(tileX, tileY);
         super(scene, worldPos.x, worldPos.y, type);
@@ -351,7 +351,7 @@ export default class Tower extends Phaser.Physics.Arcade.Sprite {
     private handleSingleTargetTowerShooting(currentTime: number, gameScene: GameScene, projectileType: string) {
         // Use projectileType for logging or customizing behavior if needed
         console.log(`Handling ${projectileType} shooting`);
-        
+
         const target = this.findNearestEnemy(gameScene);
 
         if (target) {

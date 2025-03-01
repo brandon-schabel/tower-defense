@@ -1,16 +1,14 @@
 import Phaser from 'phaser';
-import GameScene from '../scenes/game-scene';
+import { GameScene } from '../scenes/game-scene';
 import { GAME_SETTINGS, TowerType } from '../settings';
-import Tower from '../entities/tower/tower';
-import TileMapManager from '../managers/tile-map-manager';
-import GameState from '../utils/game-state';
-import TowerManager from '../managers/tower-manager';
-import UIManager from '../managers/ui-manager';
+import { Tower } from '../entities/tower/tower';
+import { TileMapManager } from '../managers/tile-map-manager';
+import { GameState } from '../utils/game-state';
 import { EventBus } from '../core/event-bus';
-import EntityManager from '../managers/entity-manager';
-import CombatSystem from '../systems/combat-system';
+import { EntityManager } from '../managers/entity-manager';
+import { CollisionSystem }  from '../systems/collision-system';
 
-export default class BuildSystem {
+export class BuildSystem {
     private scene: GameScene;
     private isBuildModeActive: boolean = false;
     private ghostTower: Phaser.GameObjects.Sprite | null = null;
@@ -22,7 +20,7 @@ export default class BuildSystem {
     private gameState: GameState;
     private eventBus: EventBus;
     private entityManager: EntityManager;
-    private combatSystem: CombatSystem;
+    private combatSystem: CollisionSystem;
 
     constructor(
         scene: GameScene,
@@ -30,7 +28,7 @@ export default class BuildSystem {
         gameState: GameState,
         eventBus: EventBus,
         entityManager: EntityManager,
-        combatSystem: CombatSystem
+        combatSystem: CollisionSystem
     ) {
         this.scene = scene;
         this.tileMapManager = tileMapManager;

@@ -1,8 +1,8 @@
 import Phaser from "phaser";
-import GameScene from "../scenes/game-scene";
-import TileMapManager from "../managers/tile-map-manager";
+import { GameScene } from "../scenes/game-scene";
+import { TileMapManager } from "../managers/tile-map-manager";
 
-export default class MapDecorator {
+export class MapDecorator {
     private scene: GameScene;
     private tileMapManager: TileMapManager;
 
@@ -83,7 +83,7 @@ export default class MapDecorator {
     private addBackgroundVariations() {
         // Add some visual variation to the ground tiles
         // We'll work directly with the scene instead of trying to get the tilemap
-        
+
         for (let y = 0; y < this.tileMapManager.getMapHeight(); y++) {
             for (let x = 0; x < this.tileMapManager.getMapWidth(); x++) {
                 // Skip if tile is occupied

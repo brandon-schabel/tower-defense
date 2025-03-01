@@ -1,13 +1,11 @@
 import Phaser from 'phaser';
-import GameScene from '../scenes/game-scene';
-import { DIFFICULTY_SETTINGS } from '../settings';
+import { GameScene } from '../scenes/game-scene';
 import { EnemyType } from '../entities/enemy/enemy-type';
-import EntityManager from '../managers/entity-manager';
-import UIManager from '../managers/ui-manager';
-import GameState, { GameStateEnum } from '../utils/game-state';
+import { EntityManager } from '../managers/entity-manager';
+import { GameState, GameStateEnum } from '../utils/game-state';
 import { EventBus } from '../core/event-bus';
 
-export default class RoundSystem {
+export class RoundSystem {
     private scene: GameScene;
     private roundState: 'build' | 'combat' | 'roundEnd' | 'transitioning' = 'build';
     private enemiesRemaining: number = 0;
@@ -83,10 +81,10 @@ export default class RoundSystem {
         if (this.roundStateDebug) {
             console.log('RoundSystem: Entered BUILD_PHASE');
         }
-        
+
         this.isRoundActive = false;
         this.isRoundEnding = false;
-        
+
         // Emit round transition event
         this.eventBus.emit('round-transition-to-build');
     }
@@ -98,16 +96,16 @@ export default class RoundSystem {
         if (this.roundStateDebug) {
             console.log('RoundSystem: Entered COMBAT_PHASE');
         }
-        
+
         this.isRoundActive = true;
         this.isRoundEnding = false;
-        
+
         // Log round start
         console.log(`Starting round ${this.currentRound}`);
-        
+
         // Show round message
         this.showRoundMessage(`Round ${this.currentRound}`, 0xffff00);
-        
+
         // Emit event
         this.eventBus.emit('round-started', this.currentRound);
     }
@@ -119,12 +117,12 @@ export default class RoundSystem {
         if (this.roundStateDebug) {
             console.log('RoundSystem: Entered ROUND_END');
         }
-        
+
         this.isRoundEnding = true;
-        
+
         // Clear any remaining enemies
         this.clearRemainingEnemies();
-        
+
         // Emit round end event
         this.eventBus.emit('round-ended', this.currentRound);
     }
@@ -168,10 +166,10 @@ export default class RoundSystem {
 
         // Increment round counter
         this.currentRound++;
-        
+
         // Transition to combat phase in game state
         this.gameState.transition(GameStateEnum.COMBAT_PHASE);
-        
+
         // Setup enemy spawns for this round
         this.setupEnemySpawns();
     }
@@ -204,28 +202,28 @@ export default class RoundSystem {
         if (this.isRoundEnding) {
             return;
         }
-        
+
         // Transition to round end state
         this.gameState.transition(GameStateEnum.ROUND_END);
-        
+
         // Calculate round rewards
         const baseReward = 50;
         const roundMultiplier = Math.max(1, this.currentRound * 0.5);
         const resourceReward = Math.floor(baseReward * roundMultiplier);
-        
+
         // Award resources to player
         this.gameState.earnResources(resourceReward);
-        
+
         // Show resource message
         this.showResourceMessage(resourceReward);
-        
+
         // Heal player
         const healAmount = 20;
         this.entityManager.getUser().heal(healAmount);
-        
+
         // Show heal message
         this.showHealMessage(healAmount);
-        
+
         // Transition to build phase after delay
         this.roundTransitionTimer = this.scene.time.delayedCall(3000, () => {
             this.gameState.transition(GameStateEnum.BUILD_PHASE);
@@ -253,15 +251,15 @@ export default class RoundSystem {
     public handleGameOver(isVictory: boolean = false): void {
         // Clear any active rounds
         this.clearRemainingEnemies();
-        
+
         if (this.roundTransitionTimer) {
             this.roundTransitionTimer.destroy();
             this.roundTransitionTimer = null;
         }
-        
+
         // Transition to game over state
         this.gameState.transition(GameStateEnum.GAME_OVER);
-        
+
         // Emit game over event with victory status
         this.eventBus.emit('game-over', { isVictory, roundsCompleted: this.currentRound });
     }
@@ -272,21 +270,21 @@ export default class RoundSystem {
     private clearRemainingEnemies(): void {
         // Get enemies group from entity manager
         const enemiesGroup = this.entityManager.getEnemiesGroup();
-        
+
         if (!enemiesGroup) {
             console.warn('No enemies group found when clearing enemies');
             return;
         }
-        
+
         // Count enemies before clearing
         const enemyCount = enemiesGroup.getChildren().length;
-        
+
         if (enemyCount > 0) {
             console.log(`Clearing ${enemyCount} remaining enemies`);
-            
+
             // Destroy all enemies
             enemiesGroup.clear(true, true);
-            
+
             // Reset enemy count
             this.enemiesRemaining = 0;
         }
@@ -300,30 +298,30 @@ export default class RoundSystem {
         const baseEnemies = 5;
         const enemiesPerRound = 2;
         const totalEnemies = baseEnemies + (this.currentRound - 1) * enemiesPerRound;
-        
+
         // Set enemies remaining counter
         this.enemiesRemaining = totalEnemies;
-        
+
         // Log enemy count
         console.log(`Spawning ${totalEnemies} enemies for round ${this.currentRound}`);
-        
+
         // Calculate spawn interval based on total enemies
         const roundDuration = 30000; // 30 seconds
         const spawnInterval = roundDuration / totalEnemies;
-        
+
         // Create a timer to spawn enemies
         let enemiesSpawned = 0;
-        
+
         const spawnTimer = this.scene.time.addEvent({
             delay: spawnInterval,
             callback: () => {
                 if (enemiesSpawned < totalEnemies) {
                     // Choose enemy type based on round
                     const enemyType = this.chooseEnemyType();
-                    
+
                     // Spawn enemy
                     this.entityManager.spawnEnemy(enemyType);
-                    
+
                     // Increment counter
                     enemiesSpawned++;
                 }
@@ -500,7 +498,7 @@ export default class RoundSystem {
             this.roundTransitionTimer.destroy();
             this.roundTransitionTimer = null;
         }
-        
+
         // Reset to build phase
         this.gameState.transition(GameStateEnum.BUILD_PHASE);
     }

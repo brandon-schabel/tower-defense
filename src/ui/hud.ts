@@ -1,7 +1,8 @@
-import Tower from "../entities/tower/tower";
-import GameScene from "../scenes/game-scene";
+import { Tower } from "../entities/tower/tower";
+import { GameScene } from "../scenes/game-scene";
 import { GAME_SETTINGS, TowerType } from "../settings";
 import { EquipmentItem, GameItem, ItemRarity } from "../types/item";
+import { GameState, GameStateEnum } from "../utils/game-state";
 
 // New enums
 enum ItemSlot {
@@ -156,7 +157,7 @@ export class ResearchTree {
   }
 }
 
-export default class HUD {
+export class HUD {
   // Add new UI elements
   private playerStatsDisplay: HTMLElement;
   private inventoryButton: HTMLButtonElement;
@@ -165,6 +166,7 @@ export default class HUD {
   private powerUpsDisplay: HTMLElement;
 
   private gameScene: GameScene;
+  private gameState: GameState;
   private resourcesDisplay: HTMLElement;
   private startRoundButton: HTMLButtonElement;
   private pauseButton: HTMLButtonElement;
@@ -174,6 +176,8 @@ export default class HUD {
 
   constructor(scene: GameScene) {
     this.gameScene = scene;
+    // Get GameState from scene
+    this.gameState = scene.getGameState();
 
     // Get UI elements
     this.resourcesDisplay = document.getElementById('resources-display') || this.createResourcesDisplay();
@@ -284,19 +288,28 @@ export default class HUD {
   }
 
   public updatePlayerStats() {
-    const player = this.gameScene.getUser();
-    const stats = `
-      <h3>Player Stats</h3>
-      <p>Health: ${player.getHealth()}/${player.getMaxHealth()}</p>
-      <p>Damage: ${player.getDamage()}</p>
-      <p>Speed: ${player.getMoveSpeed()}</p>
-      <p>Range: ${player.getRange()}</p>
-    `;
-    this.playerStatsDisplay.innerHTML = stats;
+    // Access the player entity directly through the scene's bootstrapper
+    try {
+      // Get the player entity from the game coordinator
+      const player = this.gameScene.getGameState().getScene()?.registry.get('player');
+      
+      if (!player) return;
+      
+      const stats = `
+        <h3>Player Stats</h3>
+        <p>Health: ${player.getHealth()}/${player.getMaxHealth()}</p>
+        <p>Damage: ${player.getDamage()}</p>
+        <p>Speed: ${player.getMoveSpeed()}</p>
+        <p>Range: ${player.getRange()}</p>
+      `;
+      this.playerStatsDisplay.innerHTML = stats;
+    } catch (error) {
+      console.error("Could not update player stats:", error);
+    }
   }
 
   public updateDifficultyDisplay() {
-    const difficulty = this.gameScene.getDifficulty();
+    const difficulty = this.gameState.getDifficulty();
     this.difficultyDisplay.textContent = `Difficulty: ${difficulty}`;
   }
 
@@ -345,10 +358,14 @@ export default class HUD {
       const button = document.createElement('button');
       button.className = 'tower-button';
       button.innerHTML = `
-        <img src="/assets/${(data as any).texture}.svg" alt="${(data as any).name}" />
+        <img src="/assets/towers/${(data as any).texture}.svg" alt="${(data as any).name}" />
         <span class="price">${(data as any).price}</span>
       `;
-      button.addEventListener('click', () => this.gameScene.enterBuildMode(type as TowerType));
+      button.addEventListener('click', () => {
+        // Simplified build mode trigger - use scene registry for build state
+        this.gameState.setBuildModeActive(true);
+        this.gameScene.registry.set('selectedTowerType', type);
+      });
       this.towerButtons.appendChild(button);
     });
   }
@@ -357,7 +374,8 @@ export default class HUD {
     this.startRoundButton.addEventListener('click', () => {
       if (this.startRoundButton.disabled) return;
       
-      this.gameScene.getGameCoordinator().startRound();
+      // Signal to game state to start the round
+      this.gameState.transition(GameStateEnum.COMBAT_PHASE);
       this.startRoundButton.disabled = true;
     });
 
@@ -381,82 +399,95 @@ export default class HUD {
     overlay.className = 'inventory-overlay';
     document.body.appendChild(overlay);
 
-    // Get player inventory and equipped items
-    const inventory = this.gameScene.getInventory() as unknown as InventoryItem[];
-    const equippedItems = this.gameScene.getUser().getEquippedItems();
+    try {
+      // Get inventory and equipped items from the game registry
+      const inventory = this.gameScene.registry.get('inventory') || [];
+      const equippedItems = this.gameScene.registry.get('equippedItems') || new Map();
 
-    // Create inventory container
-    const inventoryContainer = document.createElement('div');
-    inventoryContainer.className = 'inventory-container';
+      // Create inventory container
+      const inventoryContainer = document.createElement('div');
+      inventoryContainer.className = 'inventory-container';
 
-    // Create equipped items section
-    const equippedSection = document.createElement('div');
-    equippedSection.className = 'equipped-section';
-    equippedSection.innerHTML = '<h3>Equipped</h3>';
+      // Create equipped items section
+      const equippedSection = document.createElement('div');
+      equippedSection.className = 'equipped-section';
+      equippedSection.innerHTML = '<h3>Equipped</h3>';
 
-    // Create slots for equipped items
-    const slots = [ItemSlot.Weapon, ItemSlot.Head, ItemSlot.Body, ItemSlot.Accessory];
+      // Create slots for equipped items
+      const slots = [ItemSlot.Weapon, ItemSlot.Head, ItemSlot.Body, ItemSlot.Accessory];
 
-    slots.forEach(slot => {
-      const slotDiv = document.createElement('div');
-      slotDiv.className = `item-slot ${slot}-slot`;
+      slots.forEach(slot => {
+        const slotDiv = document.createElement('div');
+        slotDiv.className = `item-slot ${slot}-slot`;
 
-      const item = equippedItems.get(slot) as EquipmentItem | undefined;
-      if (item) {
-        slotDiv.innerHTML = `
-          <img src="/assets/${item.properties?.texture || 'item-default'}.svg" alt="${item.name}" />
+        const item = equippedItems.get(slot) as EquipmentItem | undefined;
+        if (item) {
+          slotDiv.innerHTML = `
+            <img src="/assets/${item.texture || 'item-default'}.svg" alt="${item.name}" />
+            <div class="item-tooltip">
+              <h4>${item.name}</h4>
+              <p>${item.description || ''}</p>
+              <p class="item-stats">${this.formatItemStats(item.properties || {})}</p>
+            </div>
+          `;
+          slotDiv.addEventListener('click', () => {
+            // Emit an event for unequipping the item
+            this.gameScene.events.emit('unequipItem', slot);
+            overlay.remove();
+            this.showInventory();
+          });
+        }
+
+        equippedSection.appendChild(slotDiv);
+      });
+
+      inventoryContainer.appendChild(equippedSection);
+
+      // Create inventory grid
+      const inventoryGrid = document.createElement('div');
+      inventoryGrid.className = 'inventory-grid';
+      inventoryGrid.innerHTML = '<h3>Inventory</h3>';
+
+      // Add inventory items
+      inventory.forEach((item: GameItem) => {
+        const itemDiv = document.createElement('div');
+        // Check if item has a tier property before accessing it
+        const tierClass = (item as any).tier ? `tier-${(item as any).tier}` : 'tier-1';
+        itemDiv.className = `inventory-item ${tierClass}`;
+
+        itemDiv.innerHTML = `
+          <img src="/assets/${item.texture || 'item-default'}.svg" alt="${item.name || 'Unknown Item'}" />
           <div class="item-tooltip">
-            <h4>${item.name}</h4>
+            <h4>${item.name || 'Unknown Item'}</h4>
             <p>${item.description || ''}</p>
             <p class="item-stats">${this.formatItemStats(item.properties || {})}</p>
           </div>
         `;
-        slotDiv.addEventListener('click', () => this.gameScene.unequipItem(item.slot));
-      }
 
-      equippedSection.appendChild(slotDiv);
-    });
+        itemDiv.addEventListener('click', () => {
+          // Emit an event for equipping the item
+          this.gameScene.events.emit('equipItem', item);
+          overlay.remove();
+          this.showInventory();
+        });
 
-    inventoryContainer.appendChild(equippedSection);
-
-    // Create inventory grid
-    const inventoryGrid = document.createElement('div');
-    inventoryGrid.className = 'inventory-grid';
-    inventoryGrid.innerHTML = '<h3>Inventory</h3>';
-
-    // Add inventory items
-    inventory.forEach(item => {
-      const itemDiv = document.createElement('div');
-      itemDiv.className = `inventory-item tier-${item.tier || '1'}`;
-
-      itemDiv.innerHTML = `
-        <img src="/assets/${item.texture || 'item-default'}.svg" alt="${item.name || 'Unknown Item'}" />
-        <div class="item-tooltip">
-          <h4>${item.name || 'Unknown Item'}</h4>
-          <p>${item.description || ''}</p>
-          <p class="item-stats">${this.formatItemStats(item.properties || {})}</p>
-        </div>
-      `;
-
-      itemDiv.addEventListener('click', () => {
-        this.gameScene.equipItem(item as unknown as GameItem);
-        overlay.remove();
-        this.showInventory();
+        inventoryGrid.appendChild(itemDiv);
       });
 
-      inventoryGrid.appendChild(itemDiv);
-    });
+      inventoryContainer.appendChild(inventoryGrid);
+      overlay.appendChild(inventoryContainer);
 
-    inventoryContainer.appendChild(inventoryGrid);
-    overlay.appendChild(inventoryContainer);
+      // Close button
+      const closeButton = document.createElement('button');
+      closeButton.className = 'close-button';
+      closeButton.textContent = 'X';
+      closeButton.addEventListener('click', () => overlay.remove());
 
-    // Close button
-    const closeButton = document.createElement('button');
-    closeButton.className = 'close-button';
-    closeButton.textContent = 'X';
-    closeButton.addEventListener('click', () => overlay.remove());
-
-    inventoryContainer.appendChild(closeButton);
+      inventoryContainer.appendChild(closeButton);
+    } catch (error) {
+      console.error("Could not load inventory:", error);
+      overlay.innerHTML = '<p>Inventory not available</p>';
+    }
   }
 
   private formatItemStats(stats: any): string {
@@ -532,13 +563,13 @@ export default class HUD {
           researchButton.className = 'research-button';
 
           // Disable if not enough resources
-          if (!this.gameScene.getGameState().canAfford(node.cost)) {
+          if (!this.gameState.canAfford(node.cost)) {
             researchButton.disabled = true;
             researchButton.classList.add('disabled');
           }
 
           researchButton.addEventListener('click', () => {
-            if (this.gameScene.getGameState().spendResources(node.cost)) {
+            if (this.gameState.spendResources(node.cost)) {
               researchTree.completeResearch(node.id);
               researchTree.saveToStorage();
               this.updateResources();
@@ -580,7 +611,7 @@ export default class HUD {
     const closeMenu = () => overlay.remove();
 
     overlay.querySelector('#save-game')?.addEventListener('click', () => {
-      this.gameScene.getGameState().saveToLocalStorage();
+      this.gameState.saveToLocalStorage();
       closeMenu();
     });
 
@@ -598,7 +629,7 @@ export default class HUD {
   }
 
   updateResources() {
-    const resources = this.gameScene.getGameState().getResources();
+    const resources = this.gameState.getResources();
     this.resourcesDisplay.textContent = `Resources: ${resources}`;
     
     // Update tower buttons based on available resources
@@ -621,7 +652,10 @@ export default class HUD {
     this.startRoundButton.onclick = () => {
       callback();
       this.startRoundButton.textContent = 'Start Round';
-      this.startRoundButton.onclick = () => this.gameScene.getGameCoordinator().startRound();
+      this.startRoundButton.onclick = () => {
+        // Transition to combat phase
+        this.gameState.transition(GameStateEnum.COMBAT_PHASE);
+      };
     };
   }
 

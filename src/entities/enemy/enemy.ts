@@ -1,19 +1,18 @@
 import Phaser from "phaser";
-import GameScene from "../../scenes/game-scene";
+import { GameScene } from "../../scenes/game-scene";
 import { HealthComponent } from "../components/health-component";
 import { EnemyType } from "./enemy-type";
-import Player from "../player/player";
-import Tower from "../tower/tower";
-import Base from "../base/base";
+import { Player } from "../player/player";
+import { Tower } from "../tower/tower";
+import { Base }  from "../base/base";
 import { EventBus } from "../../core/event-bus";
-import ItemDropManager from "../../managers/item-drop-manager";
-import CombatSystem from "../../systems/combat-system";
-import EntityManager from "../../managers/entity-manager";
+import { ItemDropManager } from "../../managers/item-drop-manager";
+import { CollisionSystem }  from "../../systems/collision-system";
+import { EntityManager } from "../../managers/entity-manager";
 import { MovementComponent } from "../components/movement-component";
-import TileMapManager from "../../managers/tile-map-manager";
-import { GAME_SETTINGS } from "../../settings";
+import { TileMapManager } from "../../managers/tile-map-manager";
 
-export default class Enemy extends Phaser.Physics.Arcade.Sprite {
+export class Enemy extends Phaser.Physics.Arcade.Sprite {
     private healthComponent: HealthComponent;
     private onDeath: () => void;
     private static nextId = 0;
@@ -29,7 +28,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     private lastAbilityUse: Map<string, number> = new Map();
     private eventBus: EventBus;
     private itemDropManager: ItemDropManager;
-    private combatSystem: CombatSystem;
+    private combatSystem: CollisionSystem;
     private entityManager: EntityManager;
     private gameScene: GameScene;
     private movementComponent: MovementComponent | null = null;
@@ -45,7 +44,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         onDeath: () => void, 
         eventBus: EventBus,
         itemDropManager: ItemDropManager,
-        combatSystem: CombatSystem,
+        combatSystem: CollisionSystem,
         entityManager: EntityManager,
         tileMapManager: TileMapManager,
         type: EnemyType = EnemyType.Basic, 

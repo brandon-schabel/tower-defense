@@ -1,9 +1,9 @@
 import Phaser from "phaser";
-import GameScene from "../../scenes/game-scene";
+import { GameScene } from "../../scenes/game-scene";
 import { HealthComponent } from "../components/health-component";
 import { EventBus } from "../../core/event-bus";
 
-export default class Base extends Phaser.Physics.Arcade.Sprite {
+export class Base extends Phaser.Physics.Arcade.Sprite {
     private healthComponent: HealthComponent;
     private eventBus: EventBus;
 

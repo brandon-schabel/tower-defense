@@ -1,15 +1,15 @@
 import Phaser from "phaser";
-import GameScene from "../../scenes/game-scene";
+import { GameScene } from "../../scenes/game-scene";
 import { HealthComponent } from "../components/health-component";
 import { GAME_SETTINGS } from "../../settings";
-import { InventoryManager } from "../../utils/inventory-manager";
+import { InventoryManager } from "../../managers/inventory-manager";
 import { GameItem, WeaponItem, EquipmentItem } from "../../types/item";
 import { InputManager } from "../../managers/input-manger";
 import { EventBus } from "../../core/event-bus";
-import ItemDropManager from "../../managers/item-drop-manager";
-import CombatSystem from "../../systems/combat-system";
+import { ItemDropManager } from "../../managers/item-drop-manager";
+import { CollisionSystem }  from "../../systems/collision-system";
 
-export default class Player extends Phaser.Physics.Arcade.Sprite {
+export class Player extends Phaser.Physics.Arcade.Sprite {
   private healthComponent: HealthComponent;
   private movementSpeed: number = GAME_SETTINGS.player.movementSpeed; // Set default directly
   private lastShotTime: number = 0;
@@ -27,7 +27,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   private initialHealth: number;
   private inputManager: InputManager;
   private eventBus: EventBus;
-  private combatSystem: CombatSystem;
+  private combatSystem: CollisionSystem;
   private itemDropManager: ItemDropManager;
   private lastMouseState: boolean = false;
   private aimLine: Phaser.GameObjects.Graphics | null = null;
@@ -37,7 +37,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     x: number,
     y: number,
     eventBus: EventBus,
-    combatSystem: CombatSystem,
+    combatSystem: CollisionSystem,
     itemDropManager: ItemDropManager
   ) {
     super(scene, x, y, 'player');
@@ -186,9 +186,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       const key = this.scene.input.keyboard?.addKey(i.toString()) || null;
       if (key && Phaser.Input.Keyboard.JustDown(key)) {
         // Use item in slot i-1 (0-indexed)
-        const items = this.inventory.getItems();
+        const items = this.inventory.getInventory().filter(slot => slot !== null);
         if (items.length > i - 1) {
-          this.handleItemUse(items[i - 1]);
+          this.handleItemUse(items[i - 1]?.item);
         }
       }
     }
@@ -259,17 +259,17 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     if (currentTime - this.lastShotTime < this.getShootCooldown()) {
       return;
     }
-    
+
     this.lastShotTime = currentTime;
-    
+
     // Get the mouse position in world coordinates
     const pointer = (this.scene as GameScene).input.activePointer;
     const worldPoint = pointer.positionToCamera((this.scene as GameScene).cameras.main) as Phaser.Math.Vector2;
-    
+
     // Determine projectile type based on equipped weapon
     let projectileType = 'player';
     let soundKey = 'shoot';
-    
+
     if (this.equippedWeapon && this.equippedWeapon.properties) {
       if (this.equippedWeapon.properties.fireRate && this.equippedWeapon.properties.fireRate > 1.5) {
         projectileType = 'player-rapid';
@@ -279,7 +279,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         soundKey = 'shoot-power';
       }
     }
-    
+
     // Play shooting sound effect (if available in the scene)
     try {
       if (this.scene.sound && this.scene.sound.get(soundKey)) {
@@ -291,7 +291,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     } catch (error) {
       console.log('Sound effect not loaded or available');
     }
-    
+
     // Use combat system to shoot projectile toward mouse position
     this.combatSystem.shootProjectile(
       this,
@@ -300,13 +300,13 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       this.getDamage(),
       projectileType
     );
-    
+
     // Calculate angle between player and target
     const angle = Phaser.Math.Angle.Between(this.x, this.y, worldPoint.x, worldPoint.y);
-    
+
     // Visual feedback - muzzle flash
     this.addMuzzleFlash(angle);
-    
+
     // Apply a small recoil effect
     const recoilForce = 30;
     if (this.body) {
@@ -316,7 +316,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.body.velocity
       );
     }
-    
+
     // Emit shoot event
     this.eventBus.emit('player-shot', {
       target: {
@@ -326,7 +326,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       angle: angle,
       damage: this.getDamage()
     });
-    
+
     return true;
   }
 
@@ -578,7 +578,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.itemDropManager.removeItem(nearbyItem);
 
         // Update the inventory UI if it's visible
-        if (scene.getGameState().isInventoryOpen) {
+        if (scene.getGameState().isInventoryOpen()) {
           scene.toggleInventoryUI();
           scene.toggleInventoryUI();
         }
@@ -620,7 +620,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       }
 
       // Remove from inventory after use
-      this.inventory.removeItem(item);
+      this.inventory.removeItemById(item.id);
 
       // Emit event for item use
       this.eventBus.emit('item-used', {
@@ -629,7 +629,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
       // Update the inventory UI if it's visible
       const scene = this.scene as GameScene;
-      if (scene.getGameState().isInventoryOpen) {
+      if (scene.getGameState().isInventoryOpen()) {
         scene.toggleInventoryUI();
         scene.toggleInventoryUI();
       }
@@ -640,7 +640,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       this.equipItem(item);
 
       // Remove from inventory
-      this.inventory.removeItem(item);
+      this.inventory.removeItemById(item.id);
 
       // Emit equip event
       this.eventBus.emit('item-equipped', {
@@ -649,7 +649,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
       // Update the inventory UI
       const scene = this.scene as GameScene;
-      if (scene.getGameState().isInventoryOpen) {
+      if (scene.getGameState().isInventoryOpen()) {
         scene.toggleInventoryUI();
         scene.toggleInventoryUI();
       }
@@ -761,43 +761,43 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
   private updateAimLine() {
     if (!this.aimLine) return;
-    
+
     const pointer = (this.scene as GameScene).input.activePointer;
     const worldPoint = pointer.positionToCamera((this.scene as GameScene).cameras.main) as Phaser.Math.Vector2;
-    
+
     // Clear previous line
     this.aimLine.clear();
-    
+
     // Calculate direction vector and angle
     const angle = Phaser.Math.Angle.Between(this.x, this.y, worldPoint.x, worldPoint.y);
-    
+
     // Check if we're on cooldown
     const currentTime = this.scene.time.now;
     const onCooldown = currentTime - this.lastShotTime < this.getShootCooldown();
-    
+
     // Set line style based on cooldown state
     const lineAlpha = onCooldown ? 0.3 : 0.7;
     const lineWidth = onCooldown ? 1 : 3;
     const lineColor = onCooldown ? 0x888888 : 0xff0000;
-    
+
     // Draw aim line from player toward mouse
     this.aimLine.lineStyle(lineWidth, lineColor, lineAlpha);
     this.aimLine.beginPath();
     this.aimLine.moveTo(this.x, this.y);
-    
+
     // Line length varies based on cooldown (shorter when cooling down)
     const lineLength = onCooldown ? 30 : 50;
     const endX = this.x + Math.cos(angle) * lineLength;
     const endY = this.y + Math.sin(angle) * lineLength;
-    
+
     this.aimLine.lineTo(endX, endY);
-    
+
     // Add a circular endpoint if not on cooldown
     if (!onCooldown) {
       this.aimLine.fillStyle(lineColor, lineAlpha);
       this.aimLine.fillCircle(endX, endY, 3);
     }
-    
+
     this.aimLine.strokePath();
   }
 }

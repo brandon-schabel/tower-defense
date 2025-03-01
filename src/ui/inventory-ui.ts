@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { InventoryManager } from '../utils/inventory-manager';
-import { GameItem, InventorySlot, ItemRarity, ItemType, HealthItem } from '../types/item';
+import { InventoryManager } from '../managers/inventory-manager';
+import { GameItem, ItemRarity, ItemType, HealthItem } from '../types/item';
 import { EventBus } from "../core/event-bus";
 
-export default class InventoryUI {
+export class InventoryUI {
     private scene: Phaser.Scene;
     private inventoryManager: InventoryManager | null;
     private container: Phaser.GameObjects.Container;
@@ -16,7 +16,7 @@ export default class InventoryUI {
         quantityText: Phaser.GameObjects.Text
     } | null = null;
     private isVisible: boolean = false;
-    private eventBus: EventBus;
+    private eventBus: EventBus | null;
     private onDragMove: ((p: Phaser.Input.Pointer) => void) | null = null;
     private background: Phaser.GameObjects.Rectangle | null = null;
 
@@ -27,14 +27,21 @@ export default class InventoryUI {
     private readonly SLOT_PADDING = 8;
     private readonly BG_PADDING = 20;
 
-    constructor(scene: Phaser.Scene, inventoryManager: InventoryManager | null = null) {
+    constructor(scene: Phaser.Scene, inventoryManager: InventoryManager | null = null, eventBus?: EventBus) {
         this.scene = scene;
         this.inventoryManager = inventoryManager;
         this.container = scene.add.container(0, 0);
         this.container.setVisible(false);
-        this.eventBus = (scene as any).eventBus;
+        
+        // Use provided eventBus or try to get it from scene as fallback
+        this.eventBus = eventBus || (scene as any).eventBus || null;
+        
         this.createUI();
-        this.eventBus.on('update-inventory', this.updateInventoryDisplay, this);
+        
+        // Only set up event listener if eventBus exists
+        if (this.eventBus) {
+            this.eventBus.on('update-inventory', this.updateInventoryDisplay);
+        }
     }
 
 
@@ -141,23 +148,23 @@ export default class InventoryUI {
     private setupSlotEvents(slotBg: Phaser.GameObjects.Rectangle, slotIndex: number): void {
         // Clear any existing event handlers to prevent duplicates
         slotBg.removeAllListeners();
-        
+
         // Add hover effect
         slotBg.on('pointerover', () => {
             slotBg.setFillStyle(0x555555); // Highlight color
-            
+
             // Show tooltip for the item
             const inventoryData = this.inventoryManager?.getInventory();
             const slotData = inventoryData?.[slotIndex];
-            
+
             if (slotData) {
                 // Get pointer position
                 const pointer = this.scene.input.activePointer;
                 this.hideItemTooltip(); // Clear any existing tooltip
-                
+
                 // Show tooltip with item info and usage instructions
                 this.showItemTooltip(slotData.item, pointer.x, pointer.y - 80);
-                
+
                 // Add usage instructions based on item type
                 if (slotData.item.type === ItemType.HEALTH) {
                     this.addTooltipInstruction("Click to use and heal");
@@ -170,7 +177,7 @@ export default class InventoryUI {
                 }
             }
         });
-        
+
         slotBg.on('pointerout', () => {
             slotBg.setFillStyle(0x333333); // Reset color
             this.hideItemTooltip();
@@ -179,15 +186,15 @@ export default class InventoryUI {
         // Modified pointer down/up behavior to clearly separate clicks from drags
         let dragStarted = false;
         let dragThreshold = 5; // Pixels to move before considering it a drag
-        let startPosition = {x: 0, y: 0};
-        
+        let startPosition = { x: 0, y: 0 };
+
         slotBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            startPosition = {x: pointer.x, y: pointer.y};
+            startPosition = { x: pointer.x, y: pointer.y };
             dragStarted = false;
-            
+
             const inventoryData = this.inventoryManager?.getInventory();
             const slotData = inventoryData?.[slotIndex];
-            
+
             // If slot has an item and we're not already dragging something
             if (slotData && !this.draggedItem) {
                 // Start tracking for potential drag
@@ -196,31 +203,31 @@ export default class InventoryUI {
                         const distance = Phaser.Math.Distance.Between(
                             startPosition.x, startPosition.y, p.x, p.y
                         );
-                        
+
                         if (distance > dragThreshold) {
                             dragStarted = true;
-                            
+
                             // Create visual for dragging
                             const sprite = this.scene.add.sprite(p.x, p.y, this.getItemTexture(slotData.item));
                             sprite.setScale(0.8);
                             sprite.setDepth(101);
-                            
+
                             // Add quantity text if stackable
                             let quantityText = null;
                             if (slotData.quantity > 1) {
                                 quantityText = this.scene.add.text(
                                     p.x + 15, p.y + 15,
                                     slotData.quantity.toString(),
-                                    { 
-                                        fontSize: '16px', 
-                                        color: '#FFFFFF', 
-                                        stroke: '#000000', 
-                                        strokeThickness: 4 
+                                    {
+                                        fontSize: '16px',
+                                        color: '#FFFFFF',
+                                        stroke: '#000000',
+                                        strokeThickness: 4
                                     }
                                 );
                                 quantityText.setDepth(102);
                             }
-                            
+
                             // Store dragged item info
                             this.draggedItem = {
                                 item: slotData.item,
@@ -240,26 +247,26 @@ export default class InventoryUI {
                 });
             }
         });
-        
+
         slotBg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
             // Clean up move listener
             if (this.onDragMove) {
                 this.scene.input.off('pointermove', this.onDragMove);
                 this.onDragMove = null;
             }
-            
+
             // If we didn't start dragging, treat it as a click to use the item
             if (!dragStarted && !this.draggedItem) {
                 const inventoryData = this.inventoryManager?.getInventory();
                 const slotData = inventoryData?.[slotIndex];
-                
+
                 if (slotData) {
                     // Use the item if it's a health item
                     if (slotData.item.type === ItemType.HEALTH) {
                         this.useItem(slotIndex);
                     }
                 }
-            } 
+            }
             // If we're dragging something and released over a slot
             else if (this.draggedItem) {
                 // Handle item placement
@@ -267,14 +274,14 @@ export default class InventoryUI {
                     this.draggedItem.originalSlot,
                     slotIndex
                 );
-                
+
                 // Clean up drag visuals
                 this.cleanupDraggedItem();
-                
+
                 // Update inventory display
                 this.updateInventoryDisplay();
             }
-            
+
             // Reset flag
             dragStarted = false;
         });
@@ -283,26 +290,26 @@ export default class InventoryUI {
     private addTooltipInstruction(text: string): void {
         const tooltip = this.container?.getData('tooltip') as Phaser.GameObjects.Container;
         if (!tooltip) return;
-        
+
         // Find the last element to position after it
         let maxY = 0;
         tooltip.each((child: Phaser.GameObjects.GameObject) => {
             // Skip the background
             if (child instanceof Phaser.GameObjects.Rectangle) return;
-            
+
             if (child instanceof Phaser.GameObjects.Text) {
                 const bottom = child.y + child.height;
                 if (bottom > maxY) maxY = bottom;
             }
         });
-        
+
         // Add instruction text
         const instruction = this.scene.add.text(
             0, maxY + 10,
             text,
-            { 
-                fontSize: '12px', 
-                color: '#ffff00', 
+            {
+                fontSize: '12px',
+                color: '#ffff00',
                 fontStyle: 'italic',
                 stroke: '#000000',
                 strokeThickness: 2
@@ -311,7 +318,7 @@ export default class InventoryUI {
         instruction.setOrigin(0.5, 0);
         instruction.setName('instruction');
         tooltip.add(instruction);
-        
+
         // Resize background to fit
         const bg = tooltip.getAt(0) as Phaser.GameObjects.Rectangle;
         if (bg) {
@@ -329,21 +336,21 @@ export default class InventoryUI {
         if (!slotData) return;
 
         // Handle different item types
-        switch(slotData.item.type) {
+        switch (slotData.item.type) {
             case ItemType.HEALTH:
                 const healthItem = slotData.item as HealthItem;
                 if (healthItem.healAmount) {
                     // First, try to remove the item before applying effects
                     const removed = this.inventoryManager?.removeItemFromSlot(slotIndex, 1);
-                    
+
                     if (removed) {
                         // Only proceed with healing if item was successfully removed
                         console.log(`Using health item to heal for ${healthItem.healAmount}`);
-                        
+
                         // Flash the slot with a healing color
                         const slotContainer = this.slots[slotIndex];
                         const slotBg = slotContainer.getAt(0) as Phaser.GameObjects.Rectangle;
-                        
+
                         // Create a more noticeable heal effect
                         this.scene.tweens.add({
                             targets: slotBg,
@@ -357,19 +364,19 @@ export default class InventoryUI {
                                 slotBg.setAlpha(1);
                             }
                         });
-                        
+
                         // Emit the heal event with a slight delay to ensure visuals sync
                         this.scene.time.delayedCall(200, () => {
-                            this.eventBus.emit('use-health-item', {
+                            this.eventBus?.emit('use-health-item', {
                                 amount: healthItem.healAmount,
                                 source: 'healthpack',
                                 timestamp: Date.now()
                             });
                         });
-                        
+
                         // Show healing effect with improved visuals
                         this.showHealingEffect(healthItem.healAmount);
-                        
+
                         // Update the inventory display after a short delay
                         this.scene.time.delayedCall(100, () => {
                             this.updateInventoryDisplay();
@@ -379,7 +386,7 @@ export default class InventoryUI {
                         // Show error feedback
                         const slotContainer = this.slots[slotIndex];
                         const slotBg = slotContainer.getAt(0) as Phaser.GameObjects.Rectangle;
-                        
+
                         this.scene.tweens.add({
                             targets: slotBg,
                             fillColor: 0xff0000,
@@ -392,7 +399,7 @@ export default class InventoryUI {
                     }
                 }
                 break;
-                
+
             // Handle other item types as needed
             default:
                 console.log(`Using item: ${slotData.item.name}`);
@@ -404,18 +411,18 @@ export default class InventoryUI {
         const camera = this.scene.cameras.main;
         const x = camera.width / 2;
         const y = camera.height / 2;
-        
+
         // Create multiple healing particles
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
             const radius = 60;
             const particleX = x + Math.cos(angle) * radius;
             const particleY = y + Math.sin(angle) * radius;
-            
+
             const particle = this.scene.add.circle(particleX, particleY, 5, 0x00ff00, 1);
             particle.setDepth(199);
             particle.setScrollFactor(0);
-            
+
             this.scene.tweens.add({
                 targets: particle,
                 x: x,
@@ -427,14 +434,14 @@ export default class InventoryUI {
                 onComplete: () => particle.destroy()
             });
         }
-        
+
         // Create a healing text that floats up
         const healText = this.scene.add.text(
-            x, 
+            x,
             y,
             `+${amount} HP`,
-            { 
-                fontSize: '32px', 
+            {
+                fontSize: '32px',
                 color: '#00FF00',
                 stroke: '#000000',
                 strokeThickness: 6,
@@ -445,7 +452,7 @@ export default class InventoryUI {
         healText.setDepth(200);
         healText.setScrollFactor(0);
         healText.setAlpha(0);
-        
+
         // Add a pulsing glow effect
         const glow = this.scene.add.graphics();
         glow.fillStyle(0x00ff00, 0.3);
@@ -453,7 +460,7 @@ export default class InventoryUI {
         glow.setScrollFactor(0);
         glow.setDepth(199);
         glow.setAlpha(0);
-        
+
         // Sequence the animations
         this.scene.tweens.add({
             targets: healText,
@@ -473,7 +480,7 @@ export default class InventoryUI {
                 });
             }
         });
-        
+
         // Glow animation
         this.scene.tweens.add({
             targets: glow,
@@ -525,42 +532,53 @@ export default class InventoryUI {
      * Update the inventory display based on current inventory data
      */
     public updateInventoryDisplay(): void {
-        // Get items from inventory manager
-        const inventoryItems = this.inventoryManager?.getItems() || [];
-
-        // Clear all slots first
+        // Clear existing slots
         this.slots.forEach(slot => {
-            // Remove all children except the background
-            const slotBg = slot.getAt(0);
-            slot.removeAll();
-            if (slotBg) slot.add(slotBg);
+            slot.removeAll(true);
         });
 
-        // Add items to slots
-        inventoryItems.forEach((item, index) => {
-            if (item && index < this.slots.length) {
+        // Get inventory data
+        const inventoryData = this.inventoryManager?.getInventory();
+
+        if (!inventoryData) {
+            return;
+        }
+
+        // Convert the string rarity to enum
+        const rarityMap: Record<string, ItemRarity> = {
+            'common': ItemRarity.COMMON,
+            'uncommon': ItemRarity.UNCOMMON,
+            'rare': ItemRarity.RARE,
+            'epic': ItemRarity.EPIC,
+            'legendary': ItemRarity.LEGENDARY
+        };
+
+        // Update each slot with inventory data
+        inventoryData.forEach((slotData, index) => {
+            if (slotData && index < this.slots.length) {
                 const slot = this.slots[index];
-                
+                const item = slotData.item;
+
                 // Create item sprite
-                const itemSprite = this.scene.add.sprite(0, 0, item.texture);
+                const itemSprite = this.scene.add.sprite(0, 0, this.getItemTexture(item));
                 itemSprite.setScale(0.5);
-                
+
                 // Add quantity text if stackable and quantity > 1
                 let quantityText = null;
                 if (item.stackable && item.quantity && item.quantity > 1) {
                     quantityText = this.scene.add.text(
-                        this.SLOT_SIZE / 2 - 5, 
-                        this.SLOT_SIZE / 2 - 5, 
-                        item.quantity.toString(), 
+                        this.SLOT_SIZE / 2 - 5,
+                        this.SLOT_SIZE / 2 - 5,
+                        item.quantity.toString(),
                         { fontSize: '12px', color: '#ffffff' }
                     );
                     quantityText.setOrigin(1, 1);
                     slot.add(quantityText);
                 }
-                
+
                 // Add rarity border based on item rarity
-                this.addRarityBorder(slot, item.rarity);
-                
+                this.addRarityBorder(slot, rarityMap[item.rarity] || ItemRarity.COMMON);
+
                 // Add sprite to slot
                 slot.add(itemSprite);
             }
@@ -690,13 +708,13 @@ export default class InventoryUI {
     public hide(): void {
         // Hide all UI elements
         this.setVisible(false);
-        
+
         // Destroy the background if it exists
         if (this.background) {
             this.background.destroy();
             this.background = null;
         }
-        
+
         // Any additional hide logic here
 
         // Clean up any dragged item
@@ -736,7 +754,9 @@ export default class InventoryUI {
     }
 
     destroy() {
-        this.eventBus.off('update-inventory', this.updateInventoryDisplay, this);
+        if (this.eventBus) {
+            this.eventBus.off('update-inventory', this.updateInventoryDisplay);
+        }
         if (this.container) {
             this.container.destroy();
         }
@@ -788,7 +808,7 @@ export default class InventoryUI {
         const rarityColor = this.getRarityColor(rarity);
         const rarityBorder = this.scene.add.rectangle(0, 0, this.SLOT_SIZE, this.SLOT_SIZE, rarityColor, 0);
         rarityBorder.setStrokeStyle(2, rarityColor);
-        
+
         // Add to slot in correct order (border behind sprite)
         slot.add(rarityBorder);
     }

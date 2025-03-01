@@ -18,7 +18,7 @@ export interface ResearchNode {
     effects: any;
 }
 
-export default class ResearchTree {
+export class ResearchTree {
     private static instance: ResearchTree;
     private researchNodes: Map<string, ResearchNode> = new Map();
     private completedResearch: Map<string, number> = new Map(); // Research ID -> Level

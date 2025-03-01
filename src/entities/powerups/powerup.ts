@@ -1,8 +1,8 @@
 // src/entities/power-up.ts
 import Phaser from "phaser";
-import GameScene from "../../scenes/game-scene";
-import Player from "../player/player";
-import GameState from "../../utils/game-state";
+import { GameScene } from "../../scenes/game-scene";
+import { Player } from "../player/player";
+import { GameState } from "../../utils/game-state";
 import { EventBus } from "../../core/event-bus";
 
 export enum PowerUpType {
@@ -14,7 +14,7 @@ export enum PowerUpType {
     Resources = 'resources'
 }
 
-export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
+export class PowerUp extends Phaser.Physics.Arcade.Sprite {
     private powerUpType: PowerUpType;
     private duration: number; // in milliseconds
     private value: number;
@@ -23,12 +23,12 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
     private gameState: GameState;
     private static nextId: number = 0;
     private id: number;
-    
+
     constructor(
-        scene: GameScene, 
-        x: number, 
-        y: number, 
-        type: PowerUpType, 
+        scene: GameScene,
+        x: number,
+        y: number,
+        type: PowerUpType,
         eventBus: EventBus,
         player: Player,
         gameState: GameState
@@ -43,15 +43,15 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
             case PowerUpType.Invincibility: texture = 'powerup-invincibility'; break;
             case PowerUpType.Resources: texture = 'powerup-resources'; break;
         }
-        
+
         super(scene, x, y, texture);
-        
+
         this.powerUpType = type;
         this.id = PowerUp.nextId++;
         this.eventBus = eventBus;
         this.player = player;
         this.gameState = gameState;
-        
+
         // Set duration and value based on type
         switch (type) {
             case PowerUpType.AttackSpeed:
@@ -79,10 +79,10 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
                 this.value = 100; // +100 resources
                 break;
         }
-        
+
         scene.add.existing(this);
         scene.physics.add.existing(this);
-        
+
         // Floating animation
         scene.tweens.add({
             targets: this,
@@ -91,7 +91,7 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
             yoyo: true,
             repeat: -1
         });
-        
+
         // Pulsing effect
         scene.tweens.add({
             targets: this,
@@ -100,11 +100,11 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
             yoyo: true,
             repeat: -1
         });
-        
+
         // Make interactive
         this.setInteractive();
         this.on('pointerdown', this.onPickup, this);
-        
+
         // Auto-destroy after a while
         scene.time.delayedCall(30000, () => {
             if (this.active) {
@@ -112,10 +112,10 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
             }
         });
     }
-    
+
     private onPickup() {
         if (!this.player) return;
-        
+
         switch (this.powerUpType) {
             case PowerUpType.AttackSpeed:
                 this.player.addTemporaryBuff('attackSpeed', this.value, this.duration);
@@ -138,14 +138,14 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
                 }
                 break;
         }
-        
+
         // Emit event
         this.eventBus.emit('powerup-collected', {
             type: this.powerUpType,
             value: this.value,
             duration: this.duration
         });
-        
+
         // Visual feedback using simple particles
         const particles = this.scene.add.particles(this.x, this.y, 'projectile', {
             speed: 100,
@@ -153,23 +153,23 @@ export default class PowerUp extends Phaser.Physics.Arcade.Sprite {
             blendMode: 'ADD',
             lifespan: 1000
         });
-        
+
         // Auto-destroy the particles after animation completes
         this.scene.time.delayedCall(1000, () => {
             particles.destroy();
         });
-        
+
         // Play sound
         // this.scene.sound.play('powerup-collect');
-        
+
         // Destroy after pickup
         this.destroy();
     }
-    
+
     public getPowerUpType(): PowerUpType {
         return this.powerUpType;
     }
-    
+
     public getId(): number {
         return this.id;
     }
