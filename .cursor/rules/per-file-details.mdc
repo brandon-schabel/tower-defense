@@ -1,0 +1,6 @@
+---
+description: Per File Details
+globs: 
+alwaysApply: true
+---
+for every file you create make sure to leave a comment at the top of the file of what the file does how it relates to the rest of the project and why it's important along with that list the most recent changes and after every single change make sure to update the comment at the top of the file to make sure it's relevant still

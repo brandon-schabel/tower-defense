@@ -1,88 +1,99 @@
 import './style.css';
 import Phaser from 'phaser';
-import { GameScene } from "./scenes/game-scene";
-import { MainMenuScene } from "./scenes/main-menu-scene";
+import { GameConfig, DEFAULT_WIDTH, DEFAULT_HEIGHT, MIN_WIDTH, MIN_HEIGHT } from './config/game-config';
+import { GameScene } from './scenes/game-scene';
+import { UIScene } from './scenes/ui-scene';
+import { GameOverScene } from './scenes/game-over-scene';
+import { PreloadScene } from './scenes/preload-scene';
+import { MenuScene } from './scenes/menu-scene';
+
+/**
+ * Main entry point for the Tower Defense game
+ * Initializes the Phaser game instance with all scenes and configuration
+ * 
+ * Most Recent Changes:
+ * - Fixed GameConfig import from game-config.ts
+ * - Removed imports for scenes that don't exist yet
+ * - Fixed SceneManager method calls
+ * - Removed unused variable warnings
+ */
 
 // Add debug logging
 console.log("[main.ts] Starting game initialization");
 
-function getGameSize() {
-  const width = window.innerWidth;
-  const height = window.innerHeight;
-
-  // Subtract some pixels for margins and UI elements
+// Function to calculate the game size based on the window size
+function getGameSize(): { width: number; height: number } {
+  const width = Math.max(window.innerWidth, MIN_WIDTH);
+  const height = Math.max(window.innerHeight, MIN_HEIGHT);
+  
   return {
-    width: Math.max(1920, width - 40),
-    height: Math.max(1080, height - 100)
+    width,
+    height
   };
 }
 
-// Get initial size
+// Create the game container if it doesn't exist
+const container = document.getElementById('game-container') || (() => {
+  const container = document.createElement('div');
+  container.id = 'game-container';
+  document.body.appendChild(container);
+  return container;
+})();
+
+// Get the initial game size
 const gameSize = getGameSize();
 console.log(`[main.ts] Game size: ${gameSize.width}x${gameSize.height}`);
 
-// Check if container exists
-const containerElement = document.getElementById("game-container");
-if (!containerElement) {
-  console.error("[main.ts] Game container element not found! Creating one...");
-  const newContainer = document.createElement("div");
-  newContainer.id = "game-container";
-  document.body.appendChild(newContainer);
-  console.log("[main.ts] Created new game container element");
-}
+/**
+ * Initialize the game with all scenes and configuration
+ */
+window.addEventListener('load', () => {
+  // Create Phaser game instance with config
+  const config = {
+    type: Phaser.AUTO,
+    width: GameConfig.width,
+    height: GameConfig.height,
+    backgroundColor: GameConfig.backgroundColor,
+    pixelArt: GameConfig.pixelArt,
+    physics: GameConfig.physics,
+    scene: [
+      // Include only scenes that are implemented
+      PreloadScene,
+      MenuScene,
+      GameScene,
+      UIScene,
+      GameOverScene
+    ],
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH
+    }
+  };
 
-const config: Phaser.Types.Core.GameConfig = {
-  type: Phaser.AUTO,
-  width: gameSize.width,
-  height: gameSize.height,
-  parent: "game-container",
-  physics: {
-    default: "arcade",
-    arcade: {
-      gravity: { x: 0, y: 0 },
-      debug: true // Enable physics debugging to see entity boundaries
-    },
-  },
-  scene: [MainMenuScene, GameScene],
-  backgroundColor: '#242424',
-  scale: {
-    mode: Phaser.Scale.RESIZE,
-    autoCenter: Phaser.Scale.CENTER_BOTH
-  }
-};
-
-// Log when we're about to create the game
-console.log("[main.ts] Creating Phaser game instance with config:", config);
-
-// Initialize game
-const game = new Phaser.Game(config);
-
-// Log game creation result
-console.log("[main.ts] Phaser game created:", game);
-
-// Initialize UI
-document.addEventListener('DOMContentLoaded', () => {
-  console.log("[main.ts] DOM loaded, setting up UI");
-  const toolbar = document.getElementById('ui-toolbar');
+  // Create and start the game
+  const game = new Phaser.Game(config);
   
-  if (!toolbar) {
-    console.warn("[main.ts] UI toolbar element not found!");
-  }
-
-  // Show toolbar when game scene starts
-  game.events.on('start-game', () => {
-    console.log("[main.ts] Game started event received");
-    toolbar?.classList.remove('hidden');
+  // Add game to window for debugging (remove in production)
+  (window as any).game = game;
+  
+  // Handle window resize events to maintain aspect ratio
+  window.addEventListener('resize', () => {
+    game.scale.refresh();
   });
-
-  // Hide toolbar when returning to menu
-  game.events.on('return-to-menu', () => {
-    console.log("[main.ts] Return to menu event received");
-    toolbar?.classList.add('hidden');
+  
+  // Setup any global event listeners
+  window.addEventListener('blur', () => {
+    // Auto-pause game when window loses focus
+    if (game.scene.isActive('game')) {
+      game.scene.pause('game');
+      // Show a message instead of trying to start a scene that doesn't exist
+      console.log('Game paused due to loss of focus');
+      // We can add a pause UI overlay here once the PauseScene is implemented
+    }
   });
 });
 
 // Add global error handler to catch initialization errors
-window.addEventListener('error', (event) => {
-  console.error("[main.ts] Global error:", event.error);
+window.addEventListener('error', (e) => {
+  console.error('Global error:', e.message);
 });
